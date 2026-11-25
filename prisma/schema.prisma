@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  CUSTOMER
+  STAFF
+  ADMIN
+}
+
+enum OrderStatus {
+  RECEIVED
+  PREPARING
+  READY
+  PICKED_UP
+  CANCELLED
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  createdAt    DateTime @default(now())
+  orders       Order[]
+}
+
+model Category {
+  id       Int    @id @default(autoincrement())
+  name     String @unique
+  position Int
+  dishes   Dish[]
+}
+
+model Allergen {
+  id     Int    @id @default(autoincrement())
+  code   String @unique
+  label  String
+  dishes Dish[]                       // n-n implicite
+}
+
+model Dish {
+  id          Int         @id @default(autoincrement())
+  name        String      @unique
+  description String
+  priceCents  Int
+  available   Boolean     @default(true)
+  categoryId  Int
+  category    Category    @relation(fields: [categoryId], references: [id])
+  allergens   Allergen[]
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id         Int         @id @default(autoincrement())
+  status     OrderStatus @default(RECEIVED)
+  note       String?
+  totalCents Int
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  userId     Int
+  user       User        @relation(fields: [userId], references: [id])
+  items      OrderItem[]
+}
+
+model OrderItem {                     // n-n explicite
+  orderId        Int
+  dishId         Int
+  quantity       Int
+  unitPriceCents Int
+  order          Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dish           Dish  @relation(fields: [dishId], references: [id], onDelete: Restrict)
+
+  @@id([orderId, dishId])
+}

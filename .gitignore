@@ -1,0 +1,22 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/src/generated/prisma
+node_modules/
+.env
+*.db
+*.db-journal
+src/generated/
+uploads/
+node_modules/
+.env
+*.db
+*.db-journal
+src/generated/
+uploads/
+
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
