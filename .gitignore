@@ -14,8 +14,4 @@ src/generated/
 # Photos envoyées (palier 3)
 uploads/
 
-# Skills IA installés par le CLI Prisma
-.agents/
-.claude/
-.windsurf/
-skills-lock.json
+.claude/settings.local.json
