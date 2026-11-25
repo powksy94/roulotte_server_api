@@ -1,21 +1,20 @@
-node_modules
-# Keep environment variables out of version control
+# Dépendances
+node_modules/
+
+# Variables d'environnement (seul .env.example est versionné)
 .env
 
-/src/generated/prisma
-node_modules/
-.env
+# Base SQLite locale
 *.db
 *.db-journal
+
+# Client Prisma généré (npx prisma generate)
 src/generated/
-uploads/
-node_modules/
-.env
-*.db
-*.db-journal
-src/generated/
+
+# Photos envoyées (palier 3)
 uploads/
 
+# Skills IA installés par le CLI Prisma
 .agents/
 .claude/
 .windsurf/
