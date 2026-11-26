@@ -1,18 +1,39 @@
+import type { MenuRepository } from "../../src/modules/menu/menu.repository.js";
 import type {
   IOrderRepository,
+  NewOrder,
   Order,
   OrderFilters,
   OrderLine,
   OrderStatus,
 } from "../../src/modules/orders/order-repository.js";
+import type { UserRepository } from "../../src/modules/users/user.repository.js";
 
 // Faux repository des commandes : même interface que la version Prisma, sans base
 export class InMemoryOrderRepository implements IOrderRepository {
   private orders: Order[] = [];
   private nextId = 1;
 
-  // Utilitaire de test : insère directement une commande
-  async create(data: {
+  // Comme la base, il retrouve le nom du client et des plats
+  constructor(
+    private readonly users?: UserRepository,
+    private readonly menu?: MenuRepository,
+  ) {}
+
+  async create(data: NewOrder) {
+    const user = await this.users?.findById(data.customerId);
+    const dishes = (await this.menu?.findDishesByIds(data.items.map((i) => i.dishId))) ?? [];
+    return this.seed({
+      customerId: data.customerId,
+      customerName: user?.name,
+      note: data.note,
+      totalCents: data.totalCents,
+      items: data.items.map((i) => ({ ...i, name: dishes.find((d) => d.id === i.dishId)?.name ?? "" })),
+    });
+  }
+
+  // Utilitaire de test : insère directement une commande, dans l'état voulu
+  async seed(data: {
     customerId: number;
     customerName?: string;
     status?: OrderStatus;

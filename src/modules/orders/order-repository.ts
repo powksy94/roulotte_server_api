@@ -29,7 +29,16 @@ export type OrderFilters = {
   pageSize: number;
 };
 
+// Ce que le service demande d'enregistrer : prix et total déjà calculés par le serveur
+export type NewOrder = {
+  customerId: number;
+  note: string | null;
+  totalCents: number;
+  items: { dishId: number; quantity: number; unitPriceCents: number }[];
+};
+
 export interface IOrderRepository {
+  create(data: NewOrder): Promise<Order>;
   findMany(filter: OrderFilters): Promise<{ items: Order[]; total: number }>;
   findById(id: number): Promise<Order | null>;
 }
@@ -60,6 +69,20 @@ const toOrder = (o: OrderRow): Order => ({
 
 export class PrismaOrderRepository implements IOrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  // Commande et lignes en une seule écriture : tout ou rien
+  async create(data: NewOrder) {
+    const row = await this.prisma.order.create({
+      data: {
+        userId: data.customerId,
+        note: data.note,
+        totalCents: data.totalCents,
+        items: { create: data.items },
+      },
+      include: orderInclude,
+    });
+    return toOrder(row);
+  }
 
   async findMany(filter: OrderFilters) {
     const where: Prisma.OrderWhereInput = {};

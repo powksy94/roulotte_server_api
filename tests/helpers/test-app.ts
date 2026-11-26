@@ -1,4 +1,7 @@
+import type { Express } from "express";
+import request from "supertest";
 import { createApp } from "../../src/app.js";
+import { hashPassword, type Role } from "../../src/fourni/auth/index.js";
 import type { Config } from "../../src/config.js";
 import { createContainer } from "../../src/container.js";
 import type { Dish } from "../../src/modules/menu/menu.repository.js";
@@ -43,7 +46,17 @@ export function buildTestApp() {
     [{ id: 1, code: "lait", label: "Lait" }, { id: 2, code: "gluten", label: "Gluten" }],
     testDishes,
   );
-  const orders = new InMemoryOrderRepository();
+  const orders = new InMemoryOrderRepository(users, menu);
   const app = createApp(createContainer(testConfig, { users, menu, orders }));
   return { app, users, menu, orders };
+}
+
+// Crée un compte avec le rôle voulu et renvoie son jeton (l'inscription publique ne donne que CUSTOMER)
+let accountCounter = 0;
+export async function loginAs(app: Express, users: InMemoryUserRepository, role: Role) {
+  const email = `${role.toLowerCase()}-${++accountCounter}@test.fr`;
+  const password = "MotDePasse1!";
+  const user = await users.create({ email, name: `Compte ${role}`, role, passwordHash: await hashPassword(password) });
+  const res = await request(app).post("/auth/login").send({ email, password });
+  return { token: res.body.token as string, user };
 }

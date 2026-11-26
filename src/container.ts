@@ -30,7 +30,7 @@ export function createContainer(config: Config, repositories: Repositories): Con
     });
 
     const menuController = new MenuController(new MenuService(repositories.menu));
-    const orderController = new OrderController(new OrderService(repositories.orders));
+    const orderController = new OrderController(new OrderService(repositories.orders, repositories.menu));
 
     return { config, auth, menuController, orderController };
 }

@@ -52,7 +52,7 @@ describe('Contrôle d’accès Auth & Commandes (GET /orders)', () => {
     tokenStaff = loginStaff.body.token;
 
     // 4. Insertion d'une commande appartenant au Client A dans le repo mémoire
-    const createdOrder = await context.orders.create({
+    const createdOrder = await context.orders.seed({
       customerId: loginA.body.user.id,
       status: 'RECEIVED',
       totalCents: 1500,
