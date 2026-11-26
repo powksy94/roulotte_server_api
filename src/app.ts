@@ -1,4 +1,5 @@
 import express from "express";
+import { createMenuRouter } from "./modules/menu/menu.routes.js";
 import type { Container } from "./container.js";
 import { authErrorHandler, installSecurity } from "./fourni/auth/index.js";
 import { errorHandler, notFoundHandler } from "./shared/error-handler.js";
@@ -10,6 +11,7 @@ export function createApp(container: Container) {
     res.json({ status: "ok" }); 
   });
   app.use("/auth", container.auth.router);
+  app.use(createMenuRouter(container.menuController));
 
   app.use(notFoundHandler);
 
