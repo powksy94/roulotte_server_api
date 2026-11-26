@@ -8,6 +8,7 @@ export type Dish = {
     description: string;
     priceCents: number;
     available: boolean;
+    stock: number | null;
     category: { id: number; name: string };
     allergens: {code: string; label: string}[];
 };
@@ -19,7 +20,7 @@ export type DishFilters = {
     q?: string;
 };
 
-export type OrderableDish = { id: number; name: string; priceCents: number;  available: boolean };
+export type OrderableDish = { id: number; name: string; priceCents: number;  available: boolean; stock: number | null };
 
 export interface MenuRepository {
     listCategories(): Promise<Category[]>;

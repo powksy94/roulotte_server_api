@@ -25,3 +25,17 @@ export type UnavailableDish = { dishId: number; reason: "NOT_FOUND" | "UNAVAILAB
 
 export const dishUnavailable = (details: UnavailableDish[]) =>
     new HttpError(422, "DISH_UNAVAILABLE", "Certains plats ne sont pas disponibles", details);
+
+// Palier 2 : stock insuffisant ; available = portions restantes
+export type InsufficientStock = { dishId: number; available: number };
+
+export const outOfStock = (details: InsufficientStock[]) =>
+    new HttpError(409, "OUT_OF_STOCK", "Stock insuffisant", details);
+
+// Palier 2 : changement de statut interdit par la machine à états
+export const invalidTransition = (from: string, to: string) =>
+    new HttpError(409, "INVALID_TRANSITION", `Transition interdite : ${from} -> ${to}`);
+
+// Palier 2 : catégorie ou code allergène inconnu
+export const invalidReference = (message: string, details?: unknown) =>
+    new HttpError(422, "INVALID_REFERENCE", message, details);

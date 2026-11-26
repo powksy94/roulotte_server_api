@@ -27,6 +27,7 @@ export const dish = (id: number, name: string, overrides: Partial<Dish> = {}): D
   description: "",
   priceCents: 1000,
   available: true,
+  stock: null,
   category: { id: burgers.id, name: burgers.name },
   allergens: [],
   ...overrides,

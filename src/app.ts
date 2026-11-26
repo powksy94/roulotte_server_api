@@ -16,7 +16,7 @@ export function createApp(container: Container) {
 
   // 2. Routes d'authentification fournies (débloque /register, /login et /me)
   app.use("/auth", container.auth.router);
-  app.use(createMenuRouter(container.menuController));
+  app.use(createMenuRouter(container.menuController, container.auth));
 
   // 3. Commandes : toutes les routes exigent une connexion
   app.use("/orders", createOrderRouter(container.orderController, container.auth));

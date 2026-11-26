@@ -9,6 +9,7 @@ const dishSelect = {
     description: true,
     priceCents: true,
     available: true,
+    stock: true,
     category: { select: { id: true, name :true }},
     allergens: { select: { code: true, label: true}, orderBy: { code: "asc"} },
 } satisfies Prisma.DishSelect;
@@ -46,7 +47,7 @@ export class PrismaMenuRepository implements MenuRepository {
     findDishesByIds(ids: number[]) {
         return this.prisma.dish.findMany({
             where: { id: { in: ids } },
-            select: { id: true, name: true, priceCents: true, available: true },
+            select: { id: true, name: true, priceCents: true, available: true, stock: true },
         });
     }
 }

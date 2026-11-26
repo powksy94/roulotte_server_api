@@ -18,6 +18,7 @@ for (const d of menu.dishes) {
   await prisma.dish.create({
     data: {
       name: d.name, description: d.description, priceCents: d.priceCents, available: d.available,
+      stock: d.stock,
       category: { connect: { name: d.category } },
       allergens: { connect: d.allergens.map((code: string) => ({ code })) },
     },
