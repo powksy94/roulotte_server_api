@@ -5,7 +5,7 @@ import { OrderService } from "../src/modules/orders/order.service.js";
 import { buildTestApp, loginAs } from "./helpers/test-app.js";
 
 const client = { id: 1, role: "CUSTOMER" as const };
-const plat = (id: number, priceCents: number, available = true) => ({ id, name: `Plat ${id}`, priceCents, available });
+const plat = (id: number, priceCents: number, available = true) => ({ id, name: `Plat ${id}`, priceCents, available, stock: null });
 
 const commande = (): Order => ({
   id: 1,
