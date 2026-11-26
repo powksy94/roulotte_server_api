@@ -54,7 +54,7 @@ describe('Contrôle d’accès Auth & Commandes (GET /orders)', () => {
     // 4. Insertion d'une commande appartenant au Client A dans le repo mémoire
     const createdOrder = await context.orders.create({
       customerId: loginA.body.user.id,
-      status: 'PENDING',
+      status: 'RECEIVED',
       totalCents: 1500,
     });
     orderIdClientA = createdOrder.id;

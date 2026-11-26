@@ -1,35 +1,38 @@
-import { z } from 'zod';
+import { z } from "zod";
+import { paginationShape } from "../../shared/pagination.js";
+import { ORDER_STATUSES, type Order } from "./order-repository.js";
 
-// Validation des query params pour GET /orders
+// GET /orders?status=RECEIVED,PREPARING&sort=createdAt&page=1&pageSize=20
 export const listOrdersQuerySchema = z.strictObject({
-    status: z.enum(['PENDING', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED']).optional(),
-    sort: z.enum(['asc', 'desc']).default('desc'),
-    page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(50).default(20),
+  ...paginationShape,
+  // Un ou plusieurs statuts séparés par des virgules ; un statut inconnu → 400
+  status: z
+    .string()
+    .transform((s) => s.split(",").map((x) => x.trim()).filter(Boolean))
+    .pipe(z.array(z.enum(ORDER_STATUSES)).min(1))
+    .optional(),
+  // -createdAt : plus récentes d'abord (défaut) ; createdAt : plus anciennes d'abord
+  sort: z.enum(["createdAt", "-createdAt"]).default("-createdAt"),
 });
-
 
 export type ListOrdersQuery = z.infer<typeof listOrdersQuerySchema>;
 
-// Validation du paramètre "id"
-export const orderIdParamSchema = z.strictObject({
-    id: z.coerce.number().int().positive(),
-});
-
-// Formatage de sortie (jamais d'entité Prisma brute)
-export function toOrderDto(order: any) {
-    return {
-        id: order.id,
-        customerId: order.customerId,
-        status: order.status,
-        totalCents: order.totalCents,
-        createdAt: order.createdAt.toISOString(),
-        items: order.items?.map((item: any) => ({
-            dishId: item.dishId,
-            dishName: item.dish?.name, // Selon notre Schéma Prisma
-            quantity: item.quantity,
-            unitPriceCents: item.unitPriceCents,
-            lineTotalCents: item.lineTotalCents,
-        })) ?? [],
-    };
+// Sortie au format du contrat : dates ISO, customer limité à { id, name }, totaux de ligne calculés
+export function toOrderDto(order: Order) {
+  return {
+    id: order.id,
+    status: order.status,
+    note: order.note,
+    totalCents: order.totalCents,
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+    customer: { id: order.customer.id, name: order.customer.name },
+    items: order.items.map((item) => ({
+      dishId: item.dishId,
+      name: item.name,
+      quantity: item.quantity,
+      unitPriceCents: item.unitPriceCents,
+      lineTotalCents: item.quantity * item.unitPriceCents,
+    })),
+  };
 }

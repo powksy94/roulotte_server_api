@@ -4,7 +4,7 @@ import { createContainer } from "../../src/container.js";
 import type { Dish } from "../../src/modules/menu/menu.repository.js";
 import { InMemoryMenuRepository } from "../fakes/in-memory-menu.repository.js";
 import { InMemoryUserRepository } from "../fakes/in-memory-user.repository.js";
-import { InMemoryOrderRepository } from '../../src/modules/orders/order-repository.js';
+import { InMemoryOrderRepository } from "../fakes/in-memory-order.repository.js";
 
 export const testConfig: Config = {
   PORT: 0,

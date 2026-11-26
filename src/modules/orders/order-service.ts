@@ -1,10 +1,10 @@
-// src/modules/orders/order.service.ts
-import { IOrderRepository } from './order-repository.js';
-import { ListOrdersQuery, toOrderDto } from './order.dto.js';
+import { notFound } from "../../shared/errors.js";
+import type { IOrderRepository } from "./order-repository.js";
+import { toOrderDto, type ListOrdersQuery } from "./order.dto.js";
 
 export interface AuthUser {
   id: number;
-  role: 'CUSTOMER' | 'STAFF' | 'ADMIN';
+  role: "CUSTOMER" | "STAFF" | "ADMIN";
 }
 
 export class OrderService {
@@ -12,11 +12,14 @@ export class OrderService {
 
   async listOrders(user: AuthUser, query: ListOrdersQuery) {
     // Si CUSTOMER, on force le filtre sur son propre ID. Si STAFF/ADMIN, undefined = toutes les commandes.
-    const customerId = user.role === 'CUSTOMER' ? user.id : undefined;
+    const customerId = user.role === "CUSTOMER" ? user.id : undefined;
 
     const { items, total } = await this.orderRepo.findMany({
-      ...query,
       customerId,
+      statuses: query.status,
+      sort: query.sort,
+      page: query.page,
+      pageSize: query.pageSize,
     });
 
     return {
@@ -30,14 +33,10 @@ export class OrderService {
   async getOrderById(user: AuthUser, orderId: number) {
     const order = await this.orderRepo.findById(orderId);
 
-    // 1. La commande n'existe pas -> 404
-    if (!order) {
-      throw Object.assign(new Error('Commande introuvable'), { status: 404, code: 'ORDER_NOT_FOUND' });
-    }
-
-    // 2. La commande appartient à un autre client et l'utilisateur n'est pas de la cuisine -> 404 (masquage)
-    if (user.role === 'CUSTOMER' && order.customerId !== user.id) {
-      throw Object.assign(new Error('Commande introuvable'), { status: 404, code: 'ORDER_NOT_FOUND' });
+    // Inexistante, ou appartenant à un autre client (hors cuisine) : 404 dans les deux cas,
+    // pour ne pas révéler qu'elle existe
+    if (!order || (user.role === "CUSTOMER" && order.customer.id !== user.id)) {
+      throw notFound("Commande introuvable");
     }
 
     return toOrderDto(order);
