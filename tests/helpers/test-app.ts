@@ -2,6 +2,7 @@ import { createApp } from "../../src/app.js";
 import type { Config } from "../../src/config.js";
 import { createContainer } from "../../src/container.js";
 import { InMemoryUserRepository } from "../fakes/in-memory-user.repository.js";
+import { InMemoryOrderRepository } from '../../src/modules/orders/order-repository.js';
 
 // Pas de .env ni de base pour les tests : configuration écrite en dur
 export const testConfig: Config = {
@@ -14,6 +15,7 @@ export const testConfig: Config = {
 
 export function buildTestApp() {
   const users = new InMemoryUserRepository();
+  const orders = new InMemoryOrderRepository();
   const app = createApp(createContainer(testConfig, { users }));
-  return { app, users };
+  return { app, users, orders };
 }
