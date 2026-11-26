@@ -3,15 +3,15 @@ import { createAuth, type Auth } from "./fourni/auth/index.js";
 import { MenuController } from "./modules/menu/menu.controller.js";
 import type { MenuRepository } from "./modules/menu/menu.repository.js";
 import { MenuService } from "./modules/menu/menu.service.js";
-import { OrderController } from "./modules/orders/order-controller.js";
-import type { IOrderRepository } from "./modules/orders/order-repository.js";
-import { OrderService } from "./modules/orders/order-service.js";
+import { OrderController } from "./modules/orders/order.controller.js";
+import type { OrderRepository } from "./modules/orders/order.repository.js";
+import { OrderService } from "./modules/orders/order.service.js";
 import type { UserRepository } from "./modules/users/user.repository.js";
 
 export type Repositories = {
     users: UserRepository;
     menu: MenuRepository;
-    orders: IOrderRepository;
+    orders: OrderRepository;
 };
 
 export type Container = {

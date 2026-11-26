@@ -1,7 +1,7 @@
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
-import type { IOrderRepository, Order } from "../src/modules/orders/order-repository.js";
-import { OrderService } from "../src/modules/orders/order-service.js";
+import type { Order, OrderRepository } from "../src/modules/orders/order.repository.js";
+import { OrderService } from "../src/modules/orders/order.service.js";
 import { buildTestApp, loginAs } from "./helpers/test-app.js";
 
 const client = { id: 1, role: "CUSTOMER" as const };
@@ -18,7 +18,7 @@ const commande = (): Order => ({
   items: [],
 });
 
-const fakeOrders = (overrides: Partial<IOrderRepository>) => overrides as IOrderRepository;
+const fakeOrders = (overrides: Partial<OrderRepository>) => overrides as OrderRepository;
 
 describe("OrderService.placeOrder (unitaire)", () => {
   it("prend les prix dans la base, pas chez le client, et calcule le total", async () => {

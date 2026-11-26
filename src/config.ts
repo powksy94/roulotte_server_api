@@ -1,5 +1,4 @@
 import "dotenv/config";
-import { defineConfig, env } from "prisma/config";
 import { z } from "zod";
 
 const configSchema = z.object({

@@ -1,16 +1,14 @@
+import type { AuthUser } from "../../fourni/auth/index.js";
 import { dishUnavailable, notFound, type UnavailableDish } from "../../shared/errors.js";
+import { toPage } from "../../shared/pagination.js";
 import type { MenuRepository } from "../menu/menu.repository.js";
-import type { IOrderRepository } from "./order-repository.js";
-import { toOrderDto, type ListOrdersQuery, type PlaceOrderInput } from "./order.dto.js";
+import type { OrderRepository } from "./order.repository.js";
+import type { ListOrdersQuery, PlaceOrderInput } from "./order.schemas.js";
 
-export interface AuthUser {
-  id: number;
-  role: "CUSTOMER" | "STAFF" | "ADMIN";
-}
-
+// Aucun req/res ici, et aucun format de sortie : le service renvoie le domaine (Order)
 export class OrderService {
   constructor(
-    private readonly orderRepo: IOrderRepository,
+    private readonly orderRepo: OrderRepository,
     // ISP : le service n'a besoin que de cette méthode de la carte
     private readonly dishes: Pick<MenuRepository, "findDishesByIds">,
   ) {}
@@ -33,33 +31,22 @@ export class OrderService {
 
     const totalCents = items.reduce((sum, i) => sum + i.quantity * i.unitPriceCents, 0);
 
-    const order = await this.orderRepo.create({
-      customerId: user.id,
-      note: input.note ?? null,
-      totalCents,
-      items,
-    });
-    return toOrderDto(order);
+    return this.orderRepo.create({ customerId: user.id, note: input.note ?? null, totalCents, items });
   }
 
   async listOrders(user: AuthUser, query: ListOrdersQuery) {
     // Si CUSTOMER, on force le filtre sur son propre ID. Si STAFF/ADMIN, undefined = toutes les commandes.
     const customerId = user.role === "CUSTOMER" ? user.id : undefined;
+    const pagination = { page: query.page, pageSize: query.pageSize };
 
     const { items, total } = await this.orderRepo.findMany({
       customerId,
       statuses: query.status,
       sort: query.sort,
-      page: query.page,
-      pageSize: query.pageSize,
+      ...pagination,
     });
 
-    return {
-      items: items.map(toOrderDto),
-      total,
-      page: query.page,
-      pageSize: query.pageSize,
-    };
+    return toPage(items, total, pagination);
   }
 
   async getOrderById(user: AuthUser, orderId: number) {
@@ -71,6 +58,6 @@ export class OrderService {
       throw notFound("Commande introuvable");
     }
 
-    return toOrderDto(order);
+    return order;
   }
 }

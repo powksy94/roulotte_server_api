@@ -1,16 +1,16 @@
 import type { MenuRepository } from "../../src/modules/menu/menu.repository.js";
 import type {
-  IOrderRepository,
   NewOrder,
   Order,
   OrderFilters,
   OrderLine,
+  OrderRepository,
   OrderStatus,
-} from "../../src/modules/orders/order-repository.js";
+} from "../../src/modules/orders/order.repository.js";
 import type { UserRepository } from "../../src/modules/users/user.repository.js";
 
 // Faux repository des commandes : même interface que la version Prisma, sans base
-export class InMemoryOrderRepository implements IOrderRepository {
+export class InMemoryOrderRepository implements OrderRepository {
   private orders: Order[] = [];
   private nextId = 1;
 

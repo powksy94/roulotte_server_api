@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
+import type { Express } from 'express';
 import { buildTestApp } from './helpers/test-app.js'; // Votre app montée avec les repos mémoire
 import { hashPassword } from '../src/fourni/auth/index.js';
 
 describe('Contrôle d’accès Auth & Commandes (GET /orders)', () => {
-  let app: any;
+  let app: Express;
   let tokenClientA: string;
   let tokenClientB: string;
   let tokenStaff: string;
