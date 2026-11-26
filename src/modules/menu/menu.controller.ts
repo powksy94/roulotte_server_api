@@ -1,7 +1,7 @@
 import type { RequestHandler } from "express";
 import { idParamsSchema, parse } from "../../shared/validation.js";
 import { toAllergenDto, toCategoryDto, toDishDto } from "./menu.dto.js";
-import { dishQuerySchema } from "./menu.schemas.js";
+import { createDishSchema, dishQuerySchema, updateDishSchema } from "./menu.schemas.js";
 import type { MenuService } from "./menu.service.js";
 
 // Le controller traduit HTTP ↔ métier : valide l'entrée, appelle le service, renvoie le DTO
@@ -29,5 +29,26 @@ export class MenuController {
         const { id } = parse(idParamsSchema, req.params);
         const dish = await this.service.getDish(id);
         res.json(toDishDto(dish));
+    };
+
+    // --- Palier 2 : administration ---
+
+    createDish: RequestHandler = async (req, res) => {
+        const input = parse(createDishSchema, req.body);
+        const dish = await this.service.createDish(input);
+        res.status(201).location(`/dishes/${dish.id}`).json(toDishDto(dish));
+    };
+
+    updateDish: RequestHandler = async (req, res) => {
+        const { id } = parse(idParamsSchema, req.params);
+        const input = parse(updateDishSchema, req.body);
+        const dish = await this.service.updateDish(id, input);
+        res.json(toDishDto(dish));
+    };
+
+    deleteDish: RequestHandler = async (req, res) => {
+        const { id } = parse(idParamsSchema, req.params);
+        await this.service.deleteDish(id);
+        res.status(204).end();
     };
 }

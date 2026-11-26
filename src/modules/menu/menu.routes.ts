@@ -9,5 +9,12 @@ export function createMenuRouter(controller: MenuController, auth: Auth) {
     router.get("/allergens", controller.listAllergens);
     router.get("/dishes", controller.listDishes);
     router.get("/dishes/:id", controller.getDish);
+
+    // Administration : connecté (401 sinon) ET admin (403 sinon), vérifié AVANT la validation du corps
+    const adminOnly = [auth.requireAuth, auth.requireRole("ADMIN")];
+    router.post("/dishes", ...adminOnly, controller.createDish);
+    router.patch("/dishes/:id", ...adminOnly, controller.updateDish);
+    router.delete("/dishes/:id", ...adminOnly, controller.deleteDish);
+
     return router;
 }
