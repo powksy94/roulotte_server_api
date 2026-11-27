@@ -3,14 +3,15 @@
 API de click & collect du food truck La Roulotte : carte, comptes, commandes.
 Stack : Node.js 22+, TypeScript strict, Express 5, Prisma 7 (SQLite), Zod, Vitest, Supertest.
 
-## Palier atteint : 1 — Service minimum ✅
+## Palier atteint : 2 ✅
 
-| Critère du palier 1 | État |
-|---|---|
-| `npm run recette:1` | **37 / 37 tests verts** |
-| Nos tests (`npm test`) | **22 tests verts** (6 exigés), dont des tests unitaires de services |
-| Parcours dans le front | connexion, carte, panier, commande, suivi dans « Mes commandes » |
-| Tag | `palier-1` |
+| Palier | Recette | Tag |
+|---|---|---|
+| 1 — Service minimum | `npm run recette:1` : **37 / 37** | `palier-1` |
+| 2 — Administration, stock, cycle de vie | `npm run recette:2` : **52 / 52** (paliers 1 et 2) | `palier-2` |
+
+- Nos tests (`npm test`) : **43 tests verts**, dont des tests unitaires de services et de la machine à états.
+- Parcours dans le front : connexion, carte, panier, commande, suivi et annulation dans « Mes commandes », avancement des commandes côté cuisine, administration de la carte.
 
 ## Lancement en 5 commandes
 
@@ -72,23 +73,63 @@ La recette crée des comptes, des plats et des commandes : relancer `npm run see
 | cuisine@roulotte.test | Cuisine123! | STAFF |
 | client@roulotte.test | Client123! | CUSTOMER |
 
-## Routes du palier 1
+## Routes
 
-| Requête | Accès | Effet |
-|---|---|---|
-| `GET /health` | public | `{ "status": "ok" }` |
-| `GET /categories` | public | Catégories triées par position |
-| `GET /allergens` | public | Les 14 allergènes, triés par code |
-| `GET /dishes` | public | Carte paginée ; filtres `category`, `available`, `allergenFree`, `q` |
-| `GET /dishes/:id` | public | Un plat |
-| `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | module fourni | Inscription (toujours CUSTOMER), connexion, compte connecté |
-| `POST /orders` | connecté | Passer une commande (201 + `Location`) |
-| `GET /orders` | connecté | Ses commandes ; toutes pour STAFF et ADMIN ; filtres `status`, `sort` |
-| `GET /orders/:id` | connecté | Sa commande ; toutes pour STAFF et ADMIN ; **404** pour celle d'un autre client |
+| Requête | Accès | Effet | Palier |
+|---|---|---|---|
+| `GET /health` | public | `{ "status": "ok" }` | 1 |
+| `GET /categories` | public | Catégories triées par position | 1 |
+| `GET /allergens` | public | Les 14 allergènes, triés par code | 1 |
+| `GET /dishes` | public | Carte paginée ; filtres `category`, `available`, `allergenFree`, `q` ; chaque plat expose son `stock` (`null` = illimité) | 1, 2 |
+| `GET /dishes/:id` | public | Un plat | 1 |
+| `POST /dishes` | ADMIN | Créer un plat (201 + `Location`) ; 409 si le nom existe, 422 si catégorie ou allergène inconnu | 2 |
+| `PATCH /dishes/:id` | ADMIN | Modification partielle et stricte | 2 |
+| `DELETE /dishes/:id` | ADMIN | 204 ; **409** si le plat a déjà été commandé | 2 |
+| `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | module fourni | Inscription (toujours CUSTOMER), connexion, compte connecté | 1 |
+| `POST /orders` | connecté | Passer une commande (201 + `Location`) ; décrémente le stock, **409 `OUT_OF_STOCK`** si insuffisant | 1, 2 |
+| `GET /orders` | connecté | Ses commandes ; toutes pour STAFF et ADMIN ; filtres `status`, `sort` | 1 |
+| `GET /orders/:id` | connecté | Sa commande ; toutes pour STAFF et ADMIN ; **404** pour celle d'un autre client | 1 |
+| `PATCH /orders/:id/status` | connecté | La cuisine fait avancer la commande ; le client peut seulement annuler la sienne tant qu'elle est `RECEIVED` | 2 |
+
+Sur les routes d'administration, l'authentification (401) et le rôle (403) sont vérifiés **avant** la validation du corps.
+
+## Stock et cycle de vie des commandes (palier 2)
+
+### Machine à états
+
+```mermaid
+stateDiagram-v2
+    [*] --> RECEIVED
+    RECEIVED --> PREPARING
+    PREPARING --> READY
+    READY --> PICKED_UP
+    RECEIVED --> CANCELLED : cuisine, admin ou client
+    PREPARING --> CANCELLED : cuisine ou admin
+    READY --> CANCELLED : cuisine ou admin
+    PICKED_UP --> [*]
+    CANCELLED --> [*]
+```
+
+Les transitions sont décrites une seule fois, sous forme de table (`ALLOWED_TRANSITIONS` dans [order.state-machine.ts](src/modules/orders/order.state-machine.ts)), et non par des `if` dispersés. Les vérifications se font dans cet ordre :
+
+| Cas | Réponse |
+|---|---|
+| Commande inexistante, ou d'un autre client | **404** (on ne révèle pas qu'elle existe) |
+| Client qui demande autre chose que `CANCELLED` | **403** `FORBIDDEN` |
+| Transition absente de la table (étape sautée, même statut, après `PICKED_UP`, client qui annule après `RECEIVED`) | **409** `INVALID_TRANSITION` |
+| Statut hors contrat (`"EN_COURS"`…) | **400** `VALIDATION_ERROR` |
+
+Le changement de statut est **conditionnel** (`where: { id, status: from }`) : si deux requêtes modifient la même commande en même temps, une seule passe, l'autre reçoit 409. Une annulation **remet les portions en stock**, dans la même transaction.
+
+### Stock
+
+- `stock` vaut `null` pour un plat illimité, sinon le nombre de portions restantes.
+- Le décrément est **conditionnel et atomique** : `updateMany` avec `stock >= quantité` dans le filtre. La base vérifie et décrémente en une seule opération, ce qui évite qu'une lecture puis une écriture vendent deux fois la dernière portion. La recette le vérifie avec 6 commandes simultanées pour 3 portions : 3 sont acceptées, 3 refusées, et le stock final vaut 0.
+- **Tout ou rien** : toutes les lignes sont traitées dans une même `$transaction`. Si une seule manque de stock, l'erreur levée dans la transaction annule tout, et la réponse 409 liste chaque plat concerné avec `{ dishId, available }`.
+- Le repository renvoie `{ ok: false, insufficient }` sans rien savoir de HTTP ; c'est le service qui le traduit en 409 `OUT_OF_STOCK`.
 
 ## Ce qui ne marche pas (encore)
 
-- **`PATCH /orders/:id/status`** (avancer ou annuler une commande) relève du palier 2 : le bouton « Annuler » du front répond pour l'instant 404.
 - **Recherche `q`** : insensible à la casse pour les lettres sans accent seulement (limite de `LIKE` sous SQLite) ; « é » et « É » ne sont pas confondus.
 - **Tri des plats par nom** : SQLite compare octet par octet. Les plats du seed sont bien triés, mais un plat créé avec une minuscule ou un accent en tête de nom pourrait être mal placé.
 
@@ -126,6 +167,7 @@ erDiagram
         string description
         int priceCents
         boolean available
+        int stock "nullable : null = illimité"
         int categoryId FK
     }
     Order {
@@ -198,10 +240,13 @@ Ordre des middlewares ([src/app.ts](src/app.ts)) : `installSecurity` (Helmet, CO
 | **DTO** | Ne jamais exposer `passwordHash` ni de champ hors contrat ; refuser `role`, `unitPriceCents`… en entrée | `*.schemas.ts` (`strictObject`), `*.dto.ts` |
 | **ISP** | Le service des commandes n'a besoin que de lire les prix des plats | `Pick<MenuRepository, "findDishesByIds">` dans [order.service.ts](src/modules/orders/order.service.ts) |
 | **DRY** | Format d'erreur, validation, pagination et sélections Prisma écrits une seule fois | [src/shared/](src/shared/), `dishSelect`, `orderInclude` |
+| **Machine à états (table de transitions)** | Les règles de changement de statut doivent être lisibles et modifiables en un seul endroit | [order.state-machine.ts](src/modules/orders/order.state-machine.ts) |
+| **Verrou optimiste** | Deux requêtes simultanées ne doivent ni survendre le stock ni annuler deux fois une commande | `updateMany` conditionnels dans [prisma-order.repository.ts](src/modules/orders/prisma-order.repository.ts) |
 
 ### Contrôle d'accès
 
-- La carte est publique. Le routeur `/orders` est entièrement protégé par `requireAuth`.
+- La carte est publique en lecture ; sa modification (`POST`, `PATCH`, `DELETE /dishes`) est réservée à l'ADMIN. Le routeur `/orders` est entièrement protégé par `requireAuth`.
+- `PATCH /orders/:id/status` n'a pas de `requireRole` : le client y a droit pour annuler. Qui peut faire quelle transition est décidé par la machine à états.
 - La **propriété** d'une commande est vérifiée dans le service : un client ne voit que les siennes. La commande d'un autre client répond **404 et non 403**, pour ne pas révéler qu'elle existe.
 - Les **prix viennent toujours de la base** : le client n'envoie que `dishId` et `quantity` ; `unitPriceCents` fige le prix du jour.
 - L'inscription donne toujours le rôle CUSTOMER : un champ `role` envoyé est refusé (400).
@@ -221,15 +266,19 @@ Ils tournent **sans base ni API lancée** : `buildTestApp()` construit l'applica
 | `menu.http.test.ts` | HTTP | tri, pagination, filtres, 400 et 404 |
 | `order-place.test.ts` | unitaire + HTTP | prix lus en base, refus cumulés (422) sans écriture, 401, 201 + `Location`, 400 |
 | `order-access.test.ts` | HTTP | un client ne voit que ses commandes, 404 pour celle d'un autre, la cuisine voit tout |
+| `menu-admin.test.ts` | HTTP | création, modification, suppression ; 401 / 403 avant validation ; 409 ; 422 ; valeurs par défaut |
+| `order-state-machine.test.ts` | unitaire | cycle complet, états finaux, 409 sur étape sautée, droits du client (403 / 409) |
+| `order-status.test.ts` | unitaire + HTTP | transition écrite avec son statut de départ, 409 si le statut a changé entre-temps, parcours cuisine, 403 / 404 / 400 |
+| `order-stock.test.ts` | unitaire | stock insuffisant → 409 `OUT_OF_STOCK` avec les portions restantes |
 
-La recette du kit complète ces tests en vérifiant le contrat sur l'API réelle, avec la vraie base.
+La recette du kit complète ces tests en vérifiant le contrat sur l'API réelle, avec la vraie base. Le stock et la concurrence ne sont vérifiés que là : les faux repositories n'ont ni transactions ni accès concurrents.
 
 ## Répartition du travail
 
 | Membre | Contributions |
 |---|---|
-| **Matthieu** | Initialisation du projet (Express, Prisma 7, configuration), socle commun (erreurs, validation, pagination, composition root), branchement du module d'auth, module `menu`, `POST /orders`, alignement du module `orders` sur le contrat et la structure, README |
-| **Goodman** | Module `orders` : `GET /orders` et `GET /orders/:id`, filtrage client / cuisine, masquage par 404, tests de contrôle d'accès |
+| **Matthieu** | Initialisation du projet (Express, Prisma 7, configuration), socle commun (erreurs, validation, pagination, composition root), branchement du module d'auth, module `menu`, `POST /orders`, alignement du module `orders` sur le contrat et la structure. Palier 2 : migration `stock`, administration de la carte, intégration du stock et de `PATCH /orders/:id/status`. README |
+| **Goodman** | Module `orders` : `GET /orders` et `GET /orders/:id`, filtrage client / cuisine, masquage par 404, tests de contrôle d'accès. Palier 2 : première version de la machine à états des commandes |
 
 <!-- À compléter et à corriger ensemble avant le rendu : noms complets, et toute contribution manquante. -->
 
