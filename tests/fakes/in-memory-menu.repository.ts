@@ -88,6 +88,12 @@ export class InMemoryMenuRepository implements MenuRepository {
     return this.orderedDishIds.has(id);
   }
 
+  async setDishImage(id: number, imageUrl: string) {
+    const updated = { ...this.dishes.find((d) => d.id === id)!, imageUrl };
+    this.dishes = this.dishes.map((d) => (d.id === id ? updated : d));
+    return updated;
+  }
+
   // Comme la base : la catégorie et les allergènes sont résolus à partir de leurs identifiants
   private toDish(id: number, data: DishData): Dish {
     const category = this.categories.find((c) => c.id === data.categoryId)!;
