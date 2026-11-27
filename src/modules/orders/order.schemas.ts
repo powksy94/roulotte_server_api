@@ -35,3 +35,7 @@ export const listOrdersQuerySchema = z.strictObject({
 });
 
 export type ListOrdersQuery = z.infer<typeof listOrdersQuerySchema>;
+
+export const updateStatusSchema = z.strictObject({
+  status: z.enum(ORDER_STATUSES),
+});

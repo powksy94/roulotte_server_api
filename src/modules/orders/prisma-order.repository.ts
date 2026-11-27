@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import type { InsufficientStock } from "../../shared/errors.js";
 import { toSkipTake } from "../../shared/pagination.js";
-import type { NewOrder, Order, OrderFilters, OrderRepository } from "./order.repository.js";
+import type { CreateOrderResult, NewOrder, Order, OrderFilters, OrderRepository, OrderStatus } from "./order.repository.js";
 
 // Ce qu'on charge avec une commande, écrit une seule fois (DRY)
 const orderInclude = {
@@ -27,22 +28,52 @@ const toOrder = (o: OrderRow): Order => ({
   })),
 });
 
+// Lever cette erreur DANS la transaction l'annule : aucun stock n'est consommé
+class InsufficientStockError extends Error {
+  constructor(readonly insufficient: InsufficientStock[]) {
+    super("Stock insuffisant");
+  }
+}
+
 // Seul fichier du module orders qui parle à Prisma
 export class PrismaOrderRepository implements OrderRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   // Commande et lignes en une seule écriture : tout ou rien
-  async create(data: NewOrder) {
-    const row = await this.prisma.order.create({
-      data: {
-        userId: data.customerId,
-        note: data.note,
-        totalCents: data.totalCents,
-        items: { create: data.items },
-      },
-      include: orderInclude,
-    });
-    return toOrder(row);
+  async create(data: NewOrder): Promise<CreateOrderResult> {
+    try {
+      const row = await this.prisma.$transaction(async (tx) => {
+        const insufficient: InsufficientStock[] = [];
+
+        for (const { dishId, quantity } of data.items) {
+          const { count } = await tx.dish.updateMany({
+            where: { id: dishId, OR: [{ stock: null }, { stock: { gte: quantity } }] },
+            data: { stock: { decrement: quantity } },
+          });
+          if (count === 0) {
+            const dish = await tx.dish.findUnique({ where: { id: dishId }, select: { stock: true } });
+            insufficient.push({ dishId, available: dish?.stock ?? 0 });
+          }
+        }
+
+        // Toutes les lignes ont été examinées : on annule tout si l'une d'elles manque de stock
+        if (insufficient.length > 0) throw new InsufficientStockError(insufficient);
+
+        return tx.order.create({
+          data: {
+            userId: data.customerId,
+            note: data.note,
+            totalCents: data.totalCents,
+            items: { create: data.items },
+          },
+          include: orderInclude,
+        });
+      });
+      return { ok: true, order: toOrder(row) };
+    } catch (error) {
+      if (error instanceof InsufficientStockError) return { ok: false, insufficient: error.insufficient };
+      throw error;
+    }
   }
 
   async findMany(filter: OrderFilters) {
@@ -70,5 +101,26 @@ export class PrismaOrderRepository implements OrderRepository {
   async findById(id: number) {
     const row = await this.prisma.order.findUnique({ where: { id }, include: orderInclude });
     return row ? toOrder(row) : null;
+  }
+
+  async updateStatus(id: number, from: OrderStatus, to: OrderStatus) {
+    return this.prisma.$transaction(async (tx) => {
+
+      const { count } = await tx.order.updateMany({ where: { id, status: from }, data: { status: to } });
+      if (count === 0) return null;
+
+      if (to === "CANCELLED") {
+        const items = await tx.orderItem.findMany({ where: { orderId: id }, select: { dishId: true, quantity: true } });
+        for (const { dishId, quantity } of items) {
+          await tx.dish.updateMany({
+            where: { id: dishId, stock: { not: null } },
+            data: { stock: { increment: quantity } },
+          });
+        }
+      }
+
+      const row = await tx.order.findUniqueOrThrow({ where: { id }, include: orderInclude });
+      return toOrder(row);
+    });
   }
 }

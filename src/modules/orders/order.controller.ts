@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 import { currentUser } from "../../fourni/auth/index.js";
 import { idParamsSchema, parse } from "../../shared/validation.js";
 import { toOrderDto } from "./order.dto.js";
-import { listOrdersQuerySchema, placeOrderSchema } from "./order.schemas.js";
+import { listOrdersQuerySchema, placeOrderSchema, updateStatusSchema } from "./order.schemas.js";
 import type { OrderService } from "./order.service.js";
 
 // Le controller traduit HTTP ↔ métier : valide l'entrée, appelle le service, renvoie le DTO.
@@ -27,4 +27,11 @@ export class OrderController {
     const order = await this.orderService.getOrderById(currentUser(req), id);
     res.json(toOrderDto(order));
   };
+
+  updateStatus: RequestHandler = async (req, res) => {
+    const { id } = parse (idParamsSchema, req.params);
+    const { status } = parse(updateStatusSchema, req.body);
+    const order = await this.orderService.updateStatus(currentUser(req), id, status);
+    res.json(toOrderDto(order));
+  }
 }

@@ -1,9 +1,10 @@
 import type { AuthUser } from "../../fourni/auth/index.js";
-import { dishUnavailable, notFound, type UnavailableDish } from "../../shared/errors.js";
+import { dishUnavailable, invalidTransition, notFound, outOfStock, type UnavailableDish } from "../../shared/errors.js";
 import { toPage } from "../../shared/pagination.js";
 import type { MenuRepository } from "../menu/menu.repository.js";
-import type { OrderRepository } from "./order.repository.js";
+import type { OrderRepository, OrderStatus } from "./order.repository.js";
 import type { ListOrdersQuery, PlaceOrderInput } from "./order.schemas.js";
+import { assertTransition } from "./order.state-machine.js";
 
 // Aucun req/res ici, et aucun format de sortie : le service renvoie le domaine (Order)
 export class OrderService {
@@ -31,7 +32,9 @@ export class OrderService {
 
     const totalCents = items.reduce((sum, i) => sum + i.quantity * i.unitPriceCents, 0);
 
-    return this.orderRepo.create({ customerId: user.id, note: input.note ?? null, totalCents, items });
+    const result = await this.orderRepo.create({ customerId: user.id, note: input.note ?? null, totalCents, items });
+    if (!result.ok) throw outOfStock(result.insufficient);
+    return result.order;
   }
 
   async listOrders(user: AuthUser, query: ListOrdersQuery) {
@@ -59,5 +62,16 @@ export class OrderService {
     }
 
     return order;
+  }
+
+  async updateStatus(user: AuthUser, orderId: number, status: OrderStatus) {
+    // 1. 404 si la commande n'existe pas ou n'est pas la sienne (client)
+    const order = await this.getOrderById(user, orderId);
+    // 2. 403 / 409 selon la machine à états
+    assertTransition(order.status, status, user.role);
+    // 3. Écriture conditionnelle : si le statut a changé entre-temps, la transition n'est plus valable
+    const updated = await this.orderRepo.updateStatus(orderId, order.status, status);
+    if (!updated) throw invalidTransition(order.status, status);
+    return updated;
   }
 }

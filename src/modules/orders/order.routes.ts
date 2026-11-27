@@ -10,6 +10,7 @@ export function createOrderRouter(controller: OrderController, auth: Auth) {
   router.post("/", controller.place);
   router.get("/", controller.list);
   router.get("/:id", controller.getById);
+  router.patch("/:id/status", controller.updateStatus);
 
   return router;
 }

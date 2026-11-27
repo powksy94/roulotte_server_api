@@ -1,3 +1,5 @@
+import type { InsufficientStock } from "../../shared/errors.js";
+
 // Les statuts du contrat, écrits une seule fois (validation et, au palier 2, machine à états)
 export const ORDER_STATUSES = ["RECEIVED", "PREPARING", "READY", "PICKED_UP", "CANCELLED"] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -26,6 +28,8 @@ export type NewOrder = {
   items: { dishId: number; quantity: number; unitPriceCents: number }[];
 };
 
+export type CreateOrderResult = { ok: true; order: Order } | { ok: false; insufficient: InsufficientStock[] };
+
 export type OrderFilters = {
   customerId?: number; // absent = toutes les commandes (cuisine, admin)
   statuses?: OrderStatus[];
@@ -36,7 +40,8 @@ export type OrderFilters = {
 
 // DAO : le contrat que respectent l'implémentation Prisma et le faux repository des tests
 export interface OrderRepository {
-  create(data: NewOrder): Promise<Order>;
+  create(data: NewOrder): Promise<CreateOrderResult>;
   findMany(filter: OrderFilters): Promise<{ items: Order[]; total: number }>;
   findById(id: number): Promise<Order | null>;
+  updateStatus(id: number, from: OrderStatus, to: OrderStatus): Promise<Order | null>;
 }
