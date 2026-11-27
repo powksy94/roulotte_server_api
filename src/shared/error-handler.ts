@@ -2,7 +2,7 @@ import type { ErrorRequestHandler, RequestHandler } from "express";
 import multer from "multer";
 // Types seulement : pino-http ajoute req.log aux requêtes (le middleware est installé dans app.ts)
 import type {} from "pino-http";
-import { HttpError, notFound, playloadTooLarge, validationError } from "./errors.js";
+import { HttpError, notFound, payloadTooLarge, validationError } from "./errors.js";
 
 export const notFoundHandler: RequestHandler = (req) => {
     throw notFound(`Route introuvable : ${req.method} ${req.path}`);
@@ -10,7 +10,7 @@ export const notFoundHandler: RequestHandler = (req) => {
 
 // Les erreurs de multer (upload) traduites au format du contrat
 function fromMulter(err: multer.MulterError): HttpError {
-    if (err.code === "LIMIT_FILE_SIZE") return playloadTooLarge("Image trop volumineuse (2 Mo maximum)")
+    if (err.code === "LIMIT_FILE_SIZE") return payloadTooLarge("Image trop volumineuse (2 Mo maximum)")
         return validationError([{ path: err.field ?? "image", message: err.message }]);
 }
 
