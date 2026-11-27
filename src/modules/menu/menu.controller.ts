@@ -61,5 +61,6 @@ export class MenuController {
     setDishImage: RequestHandler = async (req, res) => {
         const { id } = parse(idParamsSchema, req.params);
         const dish = await this.images.setDishImage(id, req.file);
+        res.json(toDishDto(dish));
     }
 }

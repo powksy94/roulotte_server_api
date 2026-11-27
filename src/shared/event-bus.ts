@@ -32,6 +32,7 @@ export class InMemoryEventBus implements EventBus {
     }
 
     subscribe(listener: EventListener) {
+        this.listeners.add(listener);
         return () => {
             this.listeners.delete(listener);
         };
