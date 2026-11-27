@@ -37,6 +37,8 @@ export class OrderService {
 
     const result = await this.orderRepo.create({ customerId: user.id, note: input.note ?? null, totalCents, items });
     if (!result.ok) throw outOfStock(result.insufficient);
+    // Observer : la cuisine (SSE) et le cache de la carte (stock) sont prévenus
+    this.events.publish({ type: "order.created", order: result.order });
     return result.order;
   }
 
@@ -75,6 +77,7 @@ export class OrderService {
     // 3. Écriture conditionnelle : si le statut a changé entre-temps, la transition n'est plus valable
     const updated = await this.orderRepo.updateStatus(orderId, order.status, status);
     if (!updated) throw invalidTransition(order.status, status);
+    this.events.publish({ type: "order.updated", order: updated });
     return updated;
   }
 }
