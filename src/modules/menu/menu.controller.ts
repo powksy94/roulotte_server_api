@@ -3,10 +3,14 @@ import { idParamsSchema, parse } from "../../shared/validation.js";
 import { toAllergenDto, toCategoryDto, toDishDto } from "./menu.dto.js";
 import { createDishSchema, dishQuerySchema, updateDishSchema } from "./menu.schemas.js";
 import type { MenuService } from "./menu.service.js";
+import type { DishImageService } from "./image/dish-image.service.js";
 
 // Le controller traduit HTTP ↔ métier : valide l'entrée, appelle le service, renvoie le DTO
 export class MenuController {
-    constructor(private readonly service: MenuService) {}
+    constructor(
+        private readonly service: MenuService,
+        private readonly images: DishImageService,
+    ) {}
 
     // Fonctions fléchées : `this` reste lié quand Express les appelle
     listCategories: RequestHandler = async (_req, res) => {
@@ -51,4 +55,11 @@ export class MenuController {
         await this.service.deleteDish(id);
         res.status(204).end();
     };
+
+    // --- Palier 3 : photo (le fichier a été lu par multer, en mémoire) ---
+
+    setDishImage: RequestHandler = async (req, res) => {
+        const { id } = parse(idParamsSchema, req.params);
+        const dish = await this.images.setDishImage(id, req.file);
+    }
 }

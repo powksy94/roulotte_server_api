@@ -9,7 +9,10 @@ import type { OrderRepository } from "./modules/orders/order.repository.js";
 import { OrderService } from "./modules/orders/order.service.js";
 import type { UserRepository } from "./modules/users/user.repository.js";
 import { InMemoryEventBus, type EventBus } from "./shared/event-bus.js";
-import { HealthRepository } from "./modules/health/health.repository.js";
+import type { HealthRepository } from "./modules/health/health.repository.js";
+import { CachedMenuRepository } from "./modules/menu/cached-menu.repository.js";
+import { DishImageService } from "./modules/menu/image/dish-image.service.js";
+import { LocalImageStorage } from "./modules/menu/image/image-storage.js";
 
 export type Repositories = {
     users: UserRepository;
@@ -45,7 +48,10 @@ export function createContainer(config: Config, repositories: Repositories): Con
     // Un seul bus pour toute l'application : le service publie, SSE et cache s'abonnent
     const events = new InMemoryEventBus((err) => logger.error({ err }, "Abonné au bus en erreur"));
 
-    const menuController = new MenuController(new MenuService(repositories.menu));
+    // Decorator : la carte en cache, invalidée par les écritures de l'admin et par les commandes (stock)
+    const menu = new CachedMenuRepository(repositories.menu, events);
+    const images = new LocalImageStorage(config.UPLOADS_DIR);
+    const menuController = new MenuController(new MenuService(menu), new DishImageService(menu, images));
     const orderController = new OrderController(new OrderService(repositories.orders, repositories.menu, events));
 
     return { config, logger, auth, events, health: repositories.health, menuController, orderController };

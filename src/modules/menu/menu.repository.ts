@@ -49,4 +49,6 @@ export interface MenuRepository {
     categoryExists(id: number): Promise<boolean>;
     findExistingAllergenCodes(codes: string[]): Promise<string[]>;
     isDishOrdered(id: number): Promise<boolean>;
+    // Palier 3 : photo du plat
+    setDishImage(id: number, imageUrl: string): Promise<Dish>;
 }

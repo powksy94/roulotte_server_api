@@ -102,6 +102,11 @@ export class PrismaMenuRepository implements MenuRepository {
     async isDishOrdered(id: number) {
         return (await this.prisma.orderItem.count({ where: { dishId: id } })) > 0;
     }
+
+    // --- Palier 3 : photo ---
+    setDishImage(id: number, imageUrl: string) {
+        return this.prisma.dish.update({ where: { id }, data: { imageUrl }, select: dishSelect })
+    }
 }
 
 function toDishWhere(filters: DishFilters): Prisma.DishWhereInput {
