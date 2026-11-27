@@ -23,7 +23,7 @@ const fakeOrders = (overrides: Partial<OrderRepository>) => overrides as OrderRe
 describe("OrderService.placeOrder (unitaire)", () => {
   it("prend les prix dans la base, pas chez le client, et calcule le total", async () => {
     const dishes = { findDishesByIds: async () => [plat(1, 1000), plat(2, 250)] };
-    const create = vi.fn(async () => commande());
+    const create = vi.fn(async () => ({ ok: true as const, order: commande() }));
     const service = new OrderService(fakeOrders({ create }), dishes);
 
     await service.placeOrder(client, { items: [{ dishId: 1, quantity: 2 }, { dishId: 2, quantity: 1 }] });

@@ -1,5 +1,6 @@
 import type { MenuRepository } from "../../src/modules/menu/menu.repository.js";
 import type {
+  CreateOrderResult,
   NewOrder,
   Order,
   OrderFilters,
@@ -9,7 +10,8 @@ import type {
 } from "../../src/modules/orders/order.repository.js";
 import type { UserRepository } from "../../src/modules/users/user.repository.js";
 
-// Faux repository des commandes : même interface que la version Prisma, sans base
+// Faux repository des commandes : même interface que la version Prisma, sans base.
+// Il ne gère pas le stock : le stock et la concurrence se testent sur la vraie base (recette)
 export class InMemoryOrderRepository implements OrderRepository {
   private orders: Order[] = [];
   private nextId = 1;
@@ -20,16 +22,17 @@ export class InMemoryOrderRepository implements OrderRepository {
     private readonly menu?: MenuRepository,
   ) {}
 
-  async create(data: NewOrder) {
+  async create(data: NewOrder): Promise<CreateOrderResult> {
     const user = await this.users?.findById(data.customerId);
     const dishes = (await this.menu?.findDishesByIds(data.items.map((i) => i.dishId))) ?? [];
-    return this.seed({
+    const order = await this.seed({
       customerId: data.customerId,
       customerName: user?.name,
       note: data.note,
       totalCents: data.totalCents,
       items: data.items.map((i) => ({ ...i, name: dishes.find((d) => d.id === i.dishId)?.name ?? "" })),
     });
+    return { ok: true, order };
   }
 
   // Utilitaire de test : insère directement une commande, dans l'état voulu
@@ -69,5 +72,14 @@ export class InMemoryOrderRepository implements OrderRepository {
 
   async findById(id: number) {
     return this.orders.find((o) => o.id === id) ?? null;
+  }
+
+  // Même règle que la base : la mise à jour n'a lieu que si le statut vaut encore `from`
+  async updateStatus(id: number, from: OrderStatus, to: OrderStatus) {
+    const order = this.orders.find((o) => o.id === id);
+    if (!order || order.status !== from) return null;
+    order.status = to;
+    order.updatedAt = new Date();
+    return order;
   }
 }
