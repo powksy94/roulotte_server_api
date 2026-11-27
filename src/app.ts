@@ -1,6 +1,10 @@
+import { randomUUID } from "node:crypto";
 import express from "express";
+import { pinoHttp } from "pino-http";
 import { createMenuRouter } from "./modules/menu/menu.routes.js";
 import { createOrderRouter } from "./modules/orders/order.routes.js";
+import { createEventsRouter } from "./modules/events/events.routes.js";
+import { createHealthRouter } from "./modules/health/health.routes.js";
 import type { Container } from "./container.js";
 import { authErrorHandler, installSecurity } from "./fourni/auth/index.js";
 import { errorHandler, notFoundHandler } from "./shared/error-handler.js";
@@ -8,18 +12,37 @@ import { errorHandler, notFoundHandler } from "./shared/error-handler.js";
 export function createApp(container: Container) {
   const app = express();
 
-  // 1. Sécurité et CORS EN PREMIER (avant toutes les routes)
-  installSecurity(app, { corsOrigin: container.config.CORS_ORIGIN }); // AVANT les routes
-  app.get("/health", (_req, res) => { 
-    res.json({ status: "ok" }); 
-  });
+  // 0. Identifiant de requête et logs, en tout premier : toute réponse, même une erreur, porte X-Request-Id
+  app.use(
+    pinoHttp({
+      logger: container.logger,
+      genReqId: (_req, res) => {
+        const id = randomUUID();
+        res.setHeader("X-Request-Id", id);
+        return id;
+      },
+    }),
+  );
 
-  // 2. Routes d'authentification fournies (débloque /register, /login et /me)
+  // 1. Sécurité et CORS EN PREMIER (avant toutes les routes)
+  installSecurity(app, { corsOrigin: container.config.CORS_ORIGIN });
+
+  // 2. Santé (vérifie la base) et photos publiques.
+  app.use(createHealthRouter(container.health));
+  app.use(
+    "/uploads",
+    express.static(container.config.UPLOADS_DIR, {
+      setHeaders: (res) => res.setHeader("Cross-Origin-Resource-Policy", "cross-origin"),
+    }),
+  );
+
+  // 3. Routes d'authentification fournies (débloque /register, /login et /me)
   app.use("/auth", container.auth.router);
   app.use(createMenuRouter(container.menuController, container.auth));
 
   // 3. Commandes : toutes les routes exigent une connexion
   app.use("/orders", createOrderRouter(container.orderController, container.auth));
+  app.use(createEventsRouter(container.events, container.auth));
 
   app.use(notFoundHandler);
 

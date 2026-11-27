@@ -1,17 +1,28 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
-import { HttpError, notFound } from "./errors.js";
+import multer from "multer";
+// Types seulement : pino-http ajoute req.log aux requêtes (le middleware est installé dans app.ts)
+import type {} from "pino-http";
+import { HttpError, notFound, playloadTooLarge, validationError } from "./errors.js";
 
 export const notFoundHandler: RequestHandler = (req) => {
     throw notFound(`Route introuvable : ${req.method} ${req.path}`);
 };
 
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-    if (err instanceof HttpError) {
-        res.status(err.status).json({
-            error: { code: err.code, message: err.message, ...(err.details === undefined ? {} : { details: err.details }) },
+// Les erreurs de multer (upload) traduites au format du contrat
+function fromMulter(err: multer.MulterError): HttpError {
+    if (err.code === "LIMIT_FILE_SIZE") return playloadTooLarge("Image trop volumineuse (2 Mo maximum)")
+        return validationError([{ path: err.field ?? "image", message: err.message }]);
+}
+
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+    const error = err instanceof multer.MulterError ? fromMulter(err) : err;
+
+    if (error instanceof HttpError) {
+        res.status(error.status).json({
+            error: { code: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) },
         });
         return;
     }
-    console.error(err);
+    req.log.error({ err: error }, "Erreur imprevue");
     res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Erreur interne du serveur" } });
 };

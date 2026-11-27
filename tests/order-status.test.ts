@@ -2,7 +2,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { Order, OrderRepository } from "../src/modules/orders/order.repository.js";
 import { OrderService } from "../src/modules/orders/order.service.js";
-import { buildTestApp, loginAs } from "./helpers/test-app.js";
+import { buildTestApp, loginAs, noEvents } from "./helpers/test-app.js";
 
 const commande = (status: Order["status"] = "RECEIVED"): Order => ({
   id: 1, status, note: null, totalCents: 0, createdAt: new Date(), updatedAt: new Date(),
@@ -13,7 +13,7 @@ const noDishes = { findDishesByIds: async () => [] };
 describe("OrderService.updateStatus (unitaire)", () => {
   it("enregistre la transition en précisant le statut de départ", async () => {
     const updateStatus = vi.fn(async () => commande("PREPARING"));
-    const service = new OrderService({ findById: async () => commande(), updateStatus } as unknown as OrderRepository, noDishes);
+    const service = new OrderService({ findById: async () => commande(), updateStatus } as unknown as OrderRepository, noDishes, noEvents);
 
     await expect(service.updateStatus({ id: 9, role: "STAFF" }, 1, "PREPARING")).resolves.toMatchObject({ status: "PREPARING" });
     expect(updateStatus).toHaveBeenCalledWith(1, "RECEIVED", "PREPARING");
@@ -23,13 +23,14 @@ describe("OrderService.updateStatus (unitaire)", () => {
     const service = new OrderService(
       { findById: async () => commande(), updateStatus: async () => null } as unknown as OrderRepository,
       noDishes,
+      noEvents,
     );
     await expect(service.updateStatus({ id: 9, role: "STAFF" }, 1, "CANCELLED")).rejects.toMatchObject({ status: 409, code: "INVALID_TRANSITION" });
   });
 
   it("n'écrit rien si la transition est interdite", async () => {
     const updateStatus = vi.fn();
-    const service = new OrderService({ findById: async () => commande("PICKED_UP"), updateStatus } as unknown as OrderRepository, noDishes);
+    const service = new OrderService({ findById: async () => commande("PICKED_UP"), updateStatus } as unknown as OrderRepository, noDishes, noEvents);
     await expect(service.updateStatus({ id: 9, role: "STAFF" }, 1, "CANCELLED")).rejects.toMatchObject({ status: 409 });
     expect(updateStatus).not.toHaveBeenCalled();
   });

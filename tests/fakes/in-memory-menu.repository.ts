@@ -50,15 +50,19 @@ export class InMemoryMenuRepository implements MenuRepository {
 
   async updateDish(id: number, data: Partial<DishData>) {
     const current = this.dishes.find((d) => d.id === id)!;
-    const updated = this.toDish(id, {
-      name: data.name ?? current.name,
-      description: data.description ?? current.description,
-      priceCents: data.priceCents ?? current.priceCents,
-      available: data.available ?? current.available,
-      stock: data.stock !== undefined ? data.stock : current.stock,
-      categoryId: data.categoryId ?? current.category.id,
-      allergens: data.allergens ?? current.allergens.map((a) => a.code),
-    });
+    const updated: Dish = {
+      ...this.toDish(id, {
+        name: data.name ?? current.name,
+        description: data.description ?? current.description,
+        priceCents: data.priceCents ?? current.priceCents,
+        available: data.available ?? current.available,
+        stock: data.stock !== undefined ? data.stock : current.stock,
+        categoryId: data.categoryId ?? current.category.id,
+        allergens: data.allergens ?? current.allergens.map((a) => a.code),
+      }),
+      // La photo ne fait pas partie de DishData : une modification garde celle qui existe
+      imageUrl: current.imageUrl,
+    };
     this.dishes = this.dishes.map((d) => (d.id === id ? updated : d));
     return updated;
   }
@@ -94,6 +98,7 @@ export class InMemoryMenuRepository implements MenuRepository {
       priceCents: data.priceCents,
       available: data.available,
       stock: data.stock,
+      imageUrl: null,
       category: { id: category.id, name: category.name },
       allergens: this.allergens
         .filter((a) => data.allergens.includes(a.code))

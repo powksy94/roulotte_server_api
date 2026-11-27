@@ -3,11 +3,28 @@ import { describe, expect, it } from "vitest";
 import { buildTestApp } from "./helpers/test-app.js";
 
 describe("socle de l'application", () => {
-  it("GET /health répond { status: 'ok' }", async () => {
+  it("GET /health vérifie la base : { status: 'ok', database: 'up' }", async () => {
     const { app } = buildTestApp();
     const res = await request(app).get("/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok" });
+    expect(res.body).toEqual({ status: "ok", database: "up" });
+  });
+
+  it("GET /health : base injoignable → 503 degraded", async () => {
+    const { app, health } = buildTestApp();
+    health.isDatabaseUp = async () => false;
+    const res = await request(app).get("/health");
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ status: "degraded", database: "down" });
+  });
+
+  it("chaque réponse, succès ou erreur, porte un X-Request-Id différent", async () => {
+    const { app } = buildTestApp();
+    const ok = await request(app).get("/categories");
+    const ko = await request(app).get("/route-inconnue");
+    expect(ok.headers["x-request-id"]).toBeTruthy();
+    expect(ko.headers["x-request-id"]).toBeTruthy();
+    expect(ok.headers["x-request-id"]).not.toBe(ko.headers["x-request-id"]);
   });
 
   it("une route inconnue répond 404 NOT_FOUND au format du contrat", async () => {

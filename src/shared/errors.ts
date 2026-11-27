@@ -39,3 +39,8 @@ export const invalidTransition = (from: string, to: string) =>
 // Palier 2 : catégorie ou code allergène inconnu
 export const invalidReference = (message: string, details?: unknown) =>
     new HttpError(422, "INVALID_REFERENCE", message, details);
+
+// Palier 3 : photo trop lourde (> 2 Mo) ou fichier qui n'est pas une image acceptée
+export const playloadTooLarge = (message: string) => new HttpError(413, "PLAYLOAD_TOO_LARGE", message);
+
+export const unsupportedMediaType = (message: string) => new HttpError(415, "UNSUPPORTED_MEDIA_TYPE", message);

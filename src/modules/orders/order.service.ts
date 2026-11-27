@@ -5,6 +5,7 @@ import type { MenuRepository } from "../menu/menu.repository.js";
 import type { OrderRepository, OrderStatus } from "./order.repository.js";
 import type { ListOrdersQuery, PlaceOrderInput } from "./order.schemas.js";
 import { assertTransition } from "./order.state-machine.js";
+import type { EventPublisher } from "../../shared/event-bus.js";
 
 // Aucun req/res ici, et aucun format de sortie : le service renvoie le domaine (Order)
 export class OrderService {
@@ -12,6 +13,8 @@ export class OrderService {
     private readonly orderRepo: OrderRepository,
     // ISP : le service n'a besoin que de cette méthode de la carte
     private readonly dishes: Pick<MenuRepository, "findDishesByIds">,
+    // Observer : le service annonce les événements, sans savoir qui écoute
+    private readonly events: EventPublisher,
   ) {}
 
   async placeOrder(user: AuthUser, input: PlaceOrderInput) {

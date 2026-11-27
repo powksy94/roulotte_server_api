@@ -10,6 +10,7 @@ const dishSelect = {
     priceCents: true,
     available: true,
     stock: true,
+    imageUrl: true,
     category: { select: { id: true, name :true }},
     allergens: { select: { code: true, label: true}, orderBy: { code: "asc"} },
 } satisfies Prisma.DishSelect;

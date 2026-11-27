@@ -20,6 +20,7 @@ export const toDishDto = (d: Dish) => ({
     priceCents: d.priceCents,
     available: d.available,
     stock: d.stock,
+    imageUrl: d.imageUrl,
     category: { id: d.category.id, name: d.category.name },
     allergens: d.allergens.map((a) => ({ code: a.code, label: a.label })),
 });

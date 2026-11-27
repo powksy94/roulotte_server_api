@@ -2,7 +2,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { Order, OrderRepository } from "../src/modules/orders/order.repository.js";
 import { OrderService } from "../src/modules/orders/order.service.js";
-import { buildTestApp, loginAs } from "./helpers/test-app.js";
+import { buildTestApp, loginAs, noEvents } from "./helpers/test-app.js";
 
 const client = { id: 1, role: "CUSTOMER" as const };
 const plat = (id: number, priceCents: number, available = true) => ({ id, name: `Plat ${id}`, priceCents, available, stock: null });
@@ -24,7 +24,7 @@ describe("OrderService.placeOrder (unitaire)", () => {
   it("prend les prix dans la base, pas chez le client, et calcule le total", async () => {
     const dishes = { findDishesByIds: async () => [plat(1, 1000), plat(2, 250)] };
     const create = vi.fn(async () => ({ ok: true as const, order: commande() }));
-    const service = new OrderService(fakeOrders({ create }), dishes);
+    const service = new OrderService(fakeOrders({ create }), dishes, noEvents);
 
     await service.placeOrder(client, { items: [{ dishId: 1, quantity: 2 }, { dishId: 2, quantity: 1 }] });
 
@@ -42,7 +42,7 @@ describe("OrderService.placeOrder (unitaire)", () => {
   it("refuse les plats inexistants ET indisponibles en une seule erreur 422, sans rien créer", async () => {
     const dishes = { findDishesByIds: async () => [plat(1, 1000), plat(2, 500, false)] };
     const create = vi.fn();
-    const service = new OrderService(fakeOrders({ create }), dishes);
+    const service = new OrderService(fakeOrders({ create }), dishes, noEvents);
 
     const attempt = service.placeOrder(client, {
       items: [{ dishId: 1, quantity: 1 }, { dishId: 2, quantity: 1 }, { dishId: 99, quantity: 1 }],

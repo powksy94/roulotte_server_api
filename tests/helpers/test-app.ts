@@ -8,6 +8,10 @@ import type { Dish } from "../../src/modules/menu/menu.repository.js";
 import { InMemoryMenuRepository } from "../fakes/in-memory-menu.repository.js";
 import { InMemoryUserRepository } from "../fakes/in-memory-user.repository.js";
 import { InMemoryOrderRepository } from "../fakes/in-memory-order.repository.js";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { HealthRepository } from "../../src/modules/health/health.repository.js";
+import type { EventPublisher } from "../../src/shared/event-bus.js";
 
 export const testConfig: Config = {
   PORT: 0,
@@ -15,7 +19,12 @@ export const testConfig: Config = {
   JWT_SECRET: "secret-de-test-assez-long",
   JWT_EXPIRES_IN: "1h",
   CORS_ORIGIN: "http://localhost:5173",
+  LOG_LEVEL: "silent",
+  UPLOADS_DIR: join(tmpdir(), "roulotte-tests-uploads"),
 };
+
+// Pour les tests unitaires du service des commandes : un bus qui n'écoute personne
+export const noEvents: EventPublisher = { publish: () => {} };
 
 // Une petite carte de test
 export const burgers = { id: 1, name: "Burgers", position: 1 };
@@ -28,6 +37,7 @@ export const dish = (id: number, name: string, overrides: Partial<Dish> = {}): D
   priceCents: 1000,
   available: true,
   stock: null,
+  imageUrl: null,
   category: { id: burgers.id, name: burgers.name },
   allergens: [],
   ...overrides,
@@ -48,8 +58,9 @@ export function buildTestApp() {
     testDishes,
   );
   const orders = new InMemoryOrderRepository(users, menu);
-  const app = createApp(createContainer(testConfig, { users, menu, orders }));
-  return { app, users, menu, orders };
+  const health: HealthRepository = { isDatabaseUp: async () => true };
+  const container = createContainer(testConfig, { users, menu, orders, health });
+  return { app: createApp(container), users, menu, orders, health, events: container.events };
 }
 
 // Crée un compte avec le rôle voulu et renvoie son jeton (l'inscription publique ne donne que CUSTOMER)

@@ -52,6 +52,7 @@ model Dish {
   priceCents  Int
   available   Boolean     @default(true)
   stock       Int?              // palier 2 : portions restantes ; null = ilimité
+  imageUrl    String?           // palier 3 : chemin relatif (/uploads/dishes/...) ; null = pas de photo
   categoryId  Int
   category    Category    @relation(fields: [categoryId], references: [id])
   allergens   Allergen[]

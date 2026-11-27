@@ -9,6 +9,7 @@ export type Dish = {
     priceCents: number;
     available: boolean;
     stock: number | null;
+    imageUrl: string | null;
     category: { id: number; name: string };
     allergens: {code: string; label: string}[];
 };
