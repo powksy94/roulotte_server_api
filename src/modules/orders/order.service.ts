@@ -5,6 +5,7 @@ import type { MenuRepository } from "../menu/menu.repository.js";
 import type { OrderRepository, OrderStatus } from "./order.repository.js";
 import type { ListOrdersQuery, PlaceOrderInput } from "./order.schemas.js";
 import { assertTransition } from "./order.state-machine.js";
+import { AppEventBus } from "../../shared/event-bus.js";
 
 // Aucun req/res ici, et aucun format de sortie : le service renvoie le domaine (Order)
 export class OrderService {
@@ -12,6 +13,7 @@ export class OrderService {
     private readonly orderRepo: OrderRepository,
     // ISP : le service n'a besoin que de cette méthode de la carte
     private readonly dishes: Pick<MenuRepository, "findDishesByIds">,
+    private readonly eventBus: AppEventBus
   ) {}
 
   async placeOrder(user: AuthUser, input: PlaceOrderInput) {
@@ -72,6 +74,16 @@ export class OrderService {
     // 3. Écriture conditionnelle : si le statut a changé entre-temps, la transition n'est plus valable
     const updated = await this.orderRepo.updateStatus(orderId, order.status, status);
     if (!updated) throw invalidTransition(order.status, status);
+    
+    this.eventBus.emit("order.updated", {
+      order: updated,
+      userId: updated.customer.id,
+    });
+
     return updated;
+
   }
+
+  
 }
+

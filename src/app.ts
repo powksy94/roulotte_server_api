@@ -4,6 +4,11 @@ import { createOrderRouter } from "./modules/orders/order.routes.js";
 import type { Container } from "./container.js";
 import { authErrorHandler, installSecurity } from "./fourni/auth/index.js";
 import { errorHandler, notFoundHandler } from "./shared/error-handler.js";
+import { AppEventBus } from "./shared/event-bus.js";
+import { OrderService } from "./modules/orders/order.service.js";
+import { EventController } from "./modules/events/event-controller.js";
+import { InMemoryOrderRepository } from "../tests/fakes/in-memory-order.repository.js";
+import { PrismaOrderRepository } from "./modules/orders/prisma-order.repository.js";
 
 export function createApp(container: Container) {
   const app = express();
@@ -26,6 +31,15 @@ export function createApp(container: Container) {
   // 4. Gestionnaire d'erreurs d'auth AVANT votre gestionnaire d'erreurs global
   app.use(authErrorHandler);
   app.use(errorHandler);
+
+  //5. Instance unique (Singleton)
+  const eventBus = new AppEventBus();
+
+  // 6. Injection des dépendances
+  const eventsController = new EventController(eventBus);
+
+  //7. Route SSE protégée par authentification (en-tête Authorization)
+  app.get("/events", eventsController.streamEvents);
   
   return app;
 }
