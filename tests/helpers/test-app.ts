@@ -21,6 +21,11 @@ export const testConfig: Config = {
   CORS_ORIGIN: "http://localhost:5173",
   LOG_LEVEL: "silent",
   UPLOADS_DIR: join(tmpdir(), "roulotte-tests-uploads"),
+  // Les tests n'appellent jamais le vrai prestataire : ils utilisent FakePaymentGateway
+  PAYMENT_URL: "http://localhost:4010",
+  PAYMENT_API_KEY: "sk_test_roulotte",
+  PAYMENT_TIMEOUT_MS: 2000,
+  PAYMENT_MAX_ATTEMPTS: 3,
 };
 
 // Pour les tests unitaires du service des commandes : un bus qui n'écoute personne

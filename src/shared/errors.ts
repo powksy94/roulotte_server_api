@@ -44,3 +44,13 @@ export const invalidReference = (message: string, details?: unknown) =>
 export const payloadTooLarge = (message: string) => new HttpError(413, "PAYLOAD_TOO_LARGE", message);
 
 export const unsupportedMediaType = (message: string) => new HttpError(415, "UNSUPPORTED_MEDIA_TYPE", message);
+
+// Palier 4 : paiement refusé (jamais réessayé), prestataire en panne ou trop lent (après les nouvelles tentatives)
+export const paymentDeclined = (reason?: string) =>
+    new HttpError(402, "PAYMENT_DECLINED", "Paiement refusé", reason ? { reason } : undefined);
+
+export const paymentProviderError = () =>
+    new HttpError(502, "PAYMENT_PROVIDER_ERROR", "Le prestataire de paiement est indisponible, réessayez plus tard");
+
+export const paymentProviderTimeout = () =>
+    new HttpError(504, "PAYMENT_PROVIDER_TIMEOUT", "Le prestataire de paiement ne répond pas à temps, réessayez plus tard");

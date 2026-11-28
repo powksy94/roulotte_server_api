@@ -12,6 +12,7 @@ const commande = (): Order => ({
   status: "RECEIVED",
   note: null,
   totalCents: 0,
+  paymentStatus: "UNPAID",
   createdAt: new Date(),
   updatedAt: new Date(),
   customer: { id: 1, name: "Client" },

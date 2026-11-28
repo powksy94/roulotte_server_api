@@ -6,6 +6,7 @@ export const toOrderDto = (order: Order) => ({
   status: order.status,
   note: order.note,
   totalCents: order.totalCents,
+  paymentStatus: order.paymentStatus,
   createdAt: order.createdAt.toISOString(),
   updatedAt: order.updatedAt.toISOString(),
   customer: { id: order.customer.id, name: order.customer.name },

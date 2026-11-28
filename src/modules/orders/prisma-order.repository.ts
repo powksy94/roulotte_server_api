@@ -17,6 +17,7 @@ const toOrder = (o: OrderRow): Order => ({
   status: o.status,
   note: o.note,
   totalCents: o.totalCents,
+  paymentStatus: o.paymentStatus,
   createdAt: o.createdAt,
   updatedAt: o.updatedAt,
   customer: { id: o.user.id, name: o.user.name },
@@ -122,5 +123,14 @@ export class PrismaOrderRepository implements OrderRepository {
       const row = await tx.order.findUniqueOrThrow({ where: { id }, include: orderInclude });
       return toOrder(row);
     });
+  }
+
+  // Palier 4 : même verrou optimiste que pour le statut ; deux paiements simultanés → un seul passe
+  async markPaid(id: number, chargeId: string) {
+    const { count } = await this.prisma.order.updateMany({
+      where: { id, paymentStatus: "UNPAID", status: { not: "CANCELLED" } },
+      data: { paymentStatus: "PAID", chargeId },
+    });
+    return count === 0 ? null : this.findById(id);
   }
 }

@@ -7,6 +7,7 @@ import type {
   OrderLine,
   OrderRepository,
   OrderStatus,
+  PaymentStatus,
 } from "../../src/modules/orders/order.repository.js";
 import type { UserRepository } from "../../src/modules/users/user.repository.js";
 
@@ -40,6 +41,7 @@ export class InMemoryOrderRepository implements OrderRepository {
     customerId: number;
     customerName?: string;
     status?: OrderStatus;
+    paymentStatus?: PaymentStatus;
     note?: string | null;
     totalCents: number;
     items?: OrderLine[];
@@ -50,6 +52,7 @@ export class InMemoryOrderRepository implements OrderRepository {
       status: data.status ?? "RECEIVED",
       note: data.note ?? null,
       totalCents: data.totalCents,
+      paymentStatus: data.paymentStatus ?? "UNPAID",
       createdAt: now,
       updatedAt: now,
       customer: { id: data.customerId, name: data.customerName ?? "Client" },
@@ -79,6 +82,15 @@ export class InMemoryOrderRepository implements OrderRepository {
     const order = this.orders.find((o) => o.id === id);
     if (!order || order.status !== from) return null;
     order.status = to;
+    order.updatedAt = new Date();
+    return order;
+  }
+
+  // Même règle que la base : seule une commande non payée et non annulée passe PAID
+  async markPaid(id: number, _chargeId: string) {
+    const order = this.orders.find((o) => o.id === id);
+    if (!order || order.paymentStatus !== "UNPAID" || order.status === "CANCELLED") return null;
+    order.paymentStatus = "PAID";
     order.updatedAt = new Date();
     return order;
   }

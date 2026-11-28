@@ -5,7 +5,7 @@ import { OrderService } from "../src/modules/orders/order.service.js";
 import { buildTestApp, loginAs, noEvents } from "./helpers/test-app.js";
 
 const commande = (status: Order["status"] = "RECEIVED"): Order => ({
-  id: 1, status, note: null, totalCents: 0, createdAt: new Date(), updatedAt: new Date(),
+  id: 1, status, note: null, totalCents: 0, paymentStatus: "UNPAID", createdAt: new Date(), updatedAt: new Date(),
   customer: { id: 1, name: "Alice" }, items: [],
 });
 const noDishes = { findDishesByIds: async () => [] };

@@ -4,6 +4,10 @@ import type { InsufficientStock } from "../../shared/errors.js";
 export const ORDER_STATUSES = ["RECEIVED", "PREPARING", "READY", "PICKED_UP", "CANCELLED"] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+// Palier 4 : une commande naît UNPAID et passe PAID une seule fois
+export const PAYMENT_STATUSES = ["UNPAID", "PAID"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
 export type OrderSort = "createdAt" | "-createdAt";
 
 export type OrderLine = { dishId: number; name: string; quantity: number; unitPriceCents: number };
@@ -14,6 +18,7 @@ export type Order = {
   status: OrderStatus;
   note: string | null;
   totalCents: number;
+  paymentStatus: PaymentStatus;
   createdAt: Date;
   updatedAt: Date;
   customer: { id: number; name: string };
@@ -44,4 +49,6 @@ export interface OrderRepository {
   findMany(filter: OrderFilters): Promise<{ items: Order[]; total: number }>;
   findById(id: number): Promise<Order | null>;
   updateStatus(id: number, from: OrderStatus, to: OrderStatus): Promise<Order | null>;
+  // Palier 4 : conditionnel ; null si la commande est déjà payée ou annulée entre-temps
+  markPaid(id: number, chargeId: string): Promise<Order | null>;
 }

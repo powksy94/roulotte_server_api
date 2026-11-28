@@ -10,7 +10,7 @@ import type { DomainEvent } from "../src/shared/event-bus.js";
 import { buildTestApp, loginAs } from "./helpers/test-app.js";
 
 const commande = (customerId: number, status: Order["status"] = "RECEIVED"): Order => ({
-  id: 1, status, note: null, totalCents: 400, createdAt: new Date(), updatedAt: new Date(),
+  id: 1, status, note: null, totalCents: 400, paymentStatus: "UNPAID", createdAt: new Date(), updatedAt: new Date(),
   customer: { id: customerId, name: "Alice" }, items: [],
 });
 
