@@ -13,6 +13,9 @@ import type { HealthRepository } from "./modules/health/health.repository.js";
 import { CachedMenuRepository } from "./modules/menu/cached-menu.repository.js";
 import { DishImageService } from "./modules/menu/image/dish-image.service.js";
 import { LocalImageStorage } from "./modules/menu/image/image-storage.js";
+import { createPaymentGateway } from "./modules/payments/payment-gateway.factory.js";
+import { PaymentController } from "./modules/payments/payment.controller.js";
+import { PaymentService } from "./modules/payments/payment.service.js";
 
 export type Repositories = {
     users: UserRepository;
@@ -29,6 +32,7 @@ export type Container = {
     health: HealthRepository;
     menuController: MenuController;
     orderController: OrderController;
+    paymentController: PaymentController;
 };
 
 // Composition root : le seul endroit qui assemble les objets (inversion des dépendances)
@@ -54,5 +58,9 @@ export function createContainer(config: Config, repositories: Repositories): Con
     const menuController = new MenuController(new MenuService(menu), new DishImageService(menu, images));
     const orderController = new OrderController(new OrderService(repositories.orders, repositories.menu, events));
 
-    return { config, logger, auth, events, health: repositories.health, menuController, orderController };
+    // Factory : HTTP (simulateur) ou faux prestataire selon PAYMENT_PROVIDER, toujours avec les nouvelles tentatives
+    const payments = createPaymentGateway(config, logger);
+    const paymentController = new PaymentController(new PaymentService(repositories.orders, payments, events));
+
+    return { config, logger, auth, events, health: repositories.health, menuController, orderController, paymentController };
 }
