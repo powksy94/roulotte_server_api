@@ -5,6 +5,8 @@ import { createMenuRouter } from "./modules/menu/menu.routes.js";
 import { createOrderRouter } from "./modules/orders/order.routes.js";
 import { createEventsRouter } from "./modules/events/events.routes.js";
 import { createHealthRouter } from "./modules/health/health.routes.js";
+import { createPaymentRouter } from "./modules/payments/payment.routes.js";
+import { createDocsRouter } from "./modules/docs/docs.routes.js";
 import type { Container } from "./container.js";
 import { authErrorHandler, installSecurity } from "./fourni/auth/index.js";
 import { errorHandler, notFoundHandler } from "./shared/error-handler.js";
@@ -29,6 +31,8 @@ export function createApp(container: Container) {
 
   // 2. Santé (vérifie la base) et photos publiques.
   app.use(createHealthRouter(container.health));
+  // Option du palier 4 : documentation interactive du contrat sur /docs
+  app.use(createDocsRouter());
   app.use(
     "/uploads",
     express.static(container.config.UPLOADS_DIR, {
@@ -42,6 +46,8 @@ export function createApp(container: Container) {
 
   // 3. Commandes : toutes les routes exigent une connexion
   app.use("/orders", createOrderRouter(container.orderController, container.auth));
+  // Palier 4 : paiement (client de la commande uniquement)
+  app.use(createPaymentRouter(container.paymentController, container.auth));
   app.use(createEventsRouter(container.events, container.auth));
 
   app.use(notFoundHandler);

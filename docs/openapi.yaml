@@ -1,0 +1,649 @@
+openapi: 3.1.0
+info:
+  title: La Roulotte — API click & collect
+  version: 1.0.0
+  description: |
+    Contrat de l'API que le front fourni consomme. **Il est figé** : chemins, champs JSON,
+    codes de statut et codes d'erreur doivent être respectés à la lettre.
+
+    Chaque opération indique son palier (`x-palier`). Un champ marqué « palier N » peut être
+    absent tant que ce palier n'est pas atteint : le front s'en accommode.
+
+    Conventions générales
+    - JSON partout (sauf l'upload d'image, en `multipart/form-data`, et le flux d'événements SSE).
+    - Montants en **centimes** (entiers) : `priceCents`, `totalCents`…
+    - Dates au format ISO 8601 (`2026-12-01T11:42:00.000Z`).
+    - Authentification : en-tête `Authorization: Bearer <token>`.
+    - Toute erreur a la forme `{ "error": { "code", "message", "details"? } }` (schéma `Error`).
+    - CORS : l'origine du front (`http://localhost:5173`, configurable) est autorisée, les autres non.
+    - Dès le palier 1, via le module fourni `fourni/auth` : en-têtes de sécurité (Helmet), pas d'en-tête `X-Powered-By`,
+      corps JSON limité à 100 ko, routes `/auth`, anti force brute sur la connexion.
+    - Palier 3 : chaque réponse porte un en-tête `X-Request-Id` (repris dans les logs).
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: Santé
+  - name: Carte
+  - name: Authentification
+  - name: Commandes
+  - name: Administration
+  - name: Temps réel
+  - name: Paiement
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Entier strictement positif (sinon 400 VALIDATION_ERROR)
+      schema: { type: integer, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+
+  headers:
+    Location:
+      description: URL de la ressource créée (ex. `/orders/42`)
+      schema: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: |
+                | Statut | code | Quand |
+                |---|---|---|
+                | 400 | VALIDATION_ERROR | body, params ou query invalides (`details` : `[{ path, message }]`) |
+                | 400 | INVALID_JSON | corps JSON mal formé |
+                | 401 | UNAUTHORIZED | token absent, invalide, expiré ; identifiants incorrects |
+                | 402 | PAYMENT_DECLINED | paiement refusé par le prestataire (palier 4) |
+                | 403 | FORBIDDEN | connecté mais pas le droit (rôle) |
+                | 404 | NOT_FOUND | ressource ou route inconnue ; commande d'un autre client |
+                | 409 | CONFLICT | email déjà pris, nom de plat déjà pris, plat déjà commandé, commande déjà payée ou annulée |
+                | 409 | OUT_OF_STOCK | stock insuffisant (`details` : `[{ dishId, available }]`, palier 2) |
+                | 409 | INVALID_TRANSITION | changement de statut interdit depuis le statut actuel (palier 2) |
+                | 413 | PAYLOAD_TOO_LARGE | corps JSON > 100 ko ; image > 2 Mo |
+                | 415 | UNSUPPORTED_MEDIA_TYPE | fichier qui n'est ni PNG, ni JPEG, ni WebP (palier 3) |
+                | 422 | DISH_UNAVAILABLE | plat commandé inexistant ou indisponible (`details` : `[{ dishId, reason }]`) |
+                | 422 | INVALID_REFERENCE | catégorie ou code allergène inconnu (palier 2) |
+                | 429 | TOO_MANY_REQUESTS | trop d'échecs de connexion |
+                | 500 | INTERNAL_ERROR | erreur imprévue (aucun détail technique renvoyé) |
+                | 502 | PAYMENT_PROVIDER_ERROR | prestataire de paiement en erreur après les nouvelles tentatives (palier 4) |
+                | 504 | PAYMENT_PROVIDER_TIMEOUT | prestataire de paiement trop lent après les nouvelles tentatives (palier 4) |
+            message: { type: string, description: Message lisible en français, affiché par le front }
+            details: {}
+      example:
+        error:
+          code: VALIDATION_ERROR
+          message: Données invalides
+          details: [{ path: items.0.quantity, message: "Trop grand : attendu <= 10" }]
+
+    Role:
+      type: string
+      enum: [CUSTOMER, STAFF, ADMIN]
+
+    User:
+      type: object
+      description: Jamais de mot de passe ni de hash dans une réponse.
+      required: [id, email, name, role]
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+
+    Category:
+      type: object
+      required: [id, name, position]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        position: { type: integer }
+
+    Allergen:
+      type: object
+      required: [id, code, label]
+      properties:
+        id: { type: integer }
+        code: { type: string, example: gluten }
+        label: { type: string, example: Gluten }
+
+    Dish:
+      type: object
+      required: [id, name, description, priceCents, available, category, allergens]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        priceCents: { type: integer, example: 1150 }
+        available: { type: boolean, description: Le plat peut-il être commandé ? }
+        stock:
+          type: [integer, "null"]
+          description: "Palier 2. Portions restantes ; null = illimité."
+        imageUrl:
+          type: [string, "null"]
+          description: "Palier 3. Chemin relatif à l'API (ex. `/uploads/dishes/3f2a….webp`) ou null."
+        category:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        allergens:
+          type: array
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code: { type: string }
+              label: { type: string }
+
+    DishInput:
+      type: object
+      additionalProperties: false
+      required: [name, priceCents, categoryId]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80, description: Unique (sinon 409 CONFLICT) }
+        description: { type: string, maxLength: 300, default: "" }
+        priceCents: { type: integer, minimum: 50, maximum: 10000 }
+        categoryId: { type: integer, description: Catégorie existante (sinon 422 INVALID_REFERENCE) }
+        allergens:
+          type: array
+          items: { type: string }
+          default: []
+          description: Codes allergènes existants (sinon 422 INVALID_REFERENCE)
+        available: { type: boolean, default: true }
+        stock: { type: [integer, "null"], minimum: 0, default: null }
+
+    OrderStatus:
+      type: string
+      enum: [RECEIVED, PREPARING, READY, PICKED_UP, CANCELLED]
+      description: |
+        Cycle de vie (palier 2) :
+        RECEIVED → PREPARING → READY → PICKED_UP ;
+        RECEIVED, PREPARING ou READY → CANCELLED.
+
+    Order:
+      type: object
+      required: [id, status, note, totalCents, createdAt, updatedAt, customer, items]
+      properties:
+        id: { type: integer }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        note: { type: [string, "null"], description: "Remarque du client (ex. « sans oignons »)" }
+        totalCents: { type: integer, description: Calculé par le serveur, jamais fourni par le client }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        customer:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [dishId, name, quantity, unitPriceCents, lineTotalCents]
+            properties:
+              dishId: { type: integer }
+              name: { type: string, description: Nom du plat }
+              quantity: { type: integer }
+              unitPriceCents: { type: integer, description: Prix du plat AU MOMENT de la commande }
+              lineTotalCents: { type: integer }
+        paymentStatus:
+          type: string
+          enum: [UNPAID, PAID]
+          description: Palier 4.
+
+    Page:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: {} }
+        total: { type: integer, description: Nombre total d'éléments (toutes pages) }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+  responses:
+    BadRequest:
+      description: Données invalides (VALIDATION_ERROR ou INVALID_JSON)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: Non authentifié (UNAUTHORIZED)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Rôle insuffisant (FORBIDDEN)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Introuvable (NOT_FOUND)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: Conflit (voir le code)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+paths:
+  /health:
+    get:
+      tags: [Santé]
+      summary: État de l'API
+      x-palier: 1
+      description: |
+        Palier 1 : `{ "status": "ok" }`.
+        Palier 3 : vérifie aussi la base → `{ "status": "ok", "database": "up" }`,
+        ou **503** `{ "status": "degraded", "database": "down" }`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  database: { type: string, enum: [up, down] }
+        "503": { description: Base de données injoignable (palier 3) }
+
+  /categories:
+    get:
+      tags: [Carte]
+      summary: Catégories, triées par position
+      x-palier: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Category" } }
+
+  /allergens:
+    get:
+      tags: [Carte]
+      summary: Les 14 allergènes réglementaires, triés par code
+      x-palier: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Allergen" } }
+
+  /dishes:
+    get:
+      tags: [Carte]
+      summary: La carte, paginée et filtrable
+      x-palier: 1
+      description: Tri par position de la catégorie, puis par nom. Les plats indisponibles sont inclus (sauf filtre).
+      parameters:
+        - { name: category, in: query, description: Id de catégorie, schema: { type: integer, minimum: 1 } }
+        - { name: available, in: query, schema: { type: string, enum: ["true", "false"] } }
+        - name: allergenFree
+          in: query
+          description: "Codes séparés par des virgules (`gluten,lait`) : plats ne contenant AUCUN de ces allergènes"
+          schema: { type: string }
+        - { name: q, in: query, description: Recherche dans le nom (insensible à la casse), schema: { type: string, maxLength: 50 } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - properties: { items: { type: array, items: { $ref: "#/components/schemas/Dish" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    post:
+      tags: [Administration]
+      summary: Créer un plat (ADMIN)
+      x-palier: 2
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DishInput" } } }
+      responses:
+        "201":
+          description: Créé
+          headers: { Location: { $ref: "#/components/headers/Location" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Dish" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { description: INVALID_REFERENCE }
+
+  /dishes/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Carte]
+      summary: Un plat
+      x-palier: 1
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Dish" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Administration]
+      summary: Modifier un plat (ADMIN) — mise à jour partielle et stricte
+      x-palier: 2
+      description: Mêmes champs que la création, tous facultatifs, au moins un. Champ inconnu → 400.
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DishInput" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Dish" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { description: INVALID_REFERENCE }
+    delete:
+      tags: [Administration]
+      summary: Supprimer un plat (ADMIN)
+      x-palier: 2
+      description: Un plat présent dans au moins une commande ne peut pas être supprimé (409 CONFLICT) — le rendre indisponible à la place.
+      security: [{ bearer: [] }]
+      responses:
+        "204": { description: Supprimé }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /dishes/{id}/image:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    put:
+      tags: [Administration]
+      summary: Photo d'un plat (ADMIN)
+      x-palier: 3
+      description: |
+        Champ de formulaire `image`. 2 Mo maximum (413). Le **contenu** du fichier doit être
+        PNG, JPEG ou WebP (vérifié sur les octets, pas sur l'extension ni le type déclaré) sinon 415.
+        Remplace la photo précédente (l'ancien fichier est supprimé).
+        L'image est ensuite servie par l'API sous `imageUrl` (ex. `GET /uploads/dishes/3f2a….webp`),
+        et doit pouvoir être affichée par le front, qui tourne sur une autre origine.
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties: { image: { type: string, format: binary } }
+      responses:
+        "200": { description: Plat mis à jour, content: { application/json: { schema: { $ref: "#/components/schemas/Dish" } } } }
+        "400": { description: Pas de fichier (VALIDATION_ERROR) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: PAYLOAD_TOO_LARGE }
+        "415": { description: UNSUPPORTED_MEDIA_TYPE }
+
+  /auth/register:
+    post:
+      tags: [Authentification]
+      summary: Inscription (toujours avec le rôle CUSTOMER)
+      x-palier: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, name, password]
+              properties:
+                email: { type: string, format: email, description: Enregistré en minuscules }
+                name: { type: string, minLength: 2, maxLength: 60 }
+                password: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        "201":
+          description: Créé
+          headers: { Location: { $ref: "#/components/headers/Location" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+        "400": { description: "Données invalides, ou champ inconnu (ex. `role`) : VALIDATION_ERROR" }
+        "409": { description: Email déjà utilisé (CONFLICT) }
+
+  /auth/login:
+    post:
+      tags: [Authentification]
+      summary: Connexion
+      x-palier: 1
+      description: |
+        Fourni par le module `fourni/auth` : après **5 échecs** en 15 minutes pour un même couple (adresse IP, email),
+        la connexion est refusée (429 TOO_MANY_REQUESTS). Les connexions réussies ne comptent pas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, user]
+                properties:
+                  token: { type: string, description: JWT signé, avec expiration }
+                  user: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { description: "Email ou mot de passe incorrect (même message dans les deux cas)" }
+        "429": { description: TOO_MANY_REQUESTS (module fourni) }
+
+  /auth/me:
+    get:
+      tags: [Authentification]
+      summary: Utilisateur connecté
+      x-palier: 1
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /orders:
+    post:
+      tags: [Commandes]
+      summary: Passer une commande (tout utilisateur connecté)
+      x-palier: 1
+      description: |
+        Les prix viennent de la base, jamais du client. Tout ou rien (transaction).
+        - plat inexistant ou indisponible → 422 DISH_UNAVAILABLE, `details` : `[{ dishId, reason: "NOT_FOUND" | "UNAVAILABLE" }]`
+        - palier 2 : stock insuffisant → 409 OUT_OF_STOCK, `details` : `[{ dishId, available }]` ; sinon le stock est décrémenté
+        - palier 4 : la commande est créée avec `paymentStatus: "UNPAID"`
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  description: Pas deux lignes pour le même plat (400)
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [dishId, quantity]
+                    properties:
+                      dishId: { type: integer, minimum: 1 }
+                      quantity: { type: integer, minimum: 1, maximum: 10 }
+                note: { type: string, maxLength: 200 }
+      responses:
+        "201":
+          description: Créée (statut RECEIVED)
+          headers: { Location: { $ref: "#/components/headers/Location" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { description: OUT_OF_STOCK (palier 2) }
+        "422": { description: DISH_UNAVAILABLE }
+    get:
+      tags: [Commandes]
+      summary: Lister des commandes
+      x-palier: 1
+      description: |
+        CUSTOMER : uniquement SES commandes. STAFF et ADMIN : toutes les commandes (palier 2).
+      security: [{ bearer: [] }]
+      parameters:
+        - name: status
+          in: query
+          description: "Un ou plusieurs statuts séparés par des virgules (`RECEIVED,PREPARING`)"
+          schema: { type: string }
+        - name: sort
+          in: query
+          description: "`-createdAt` (plus récentes d'abord, défaut) ou `createdAt` (plus anciennes d'abord)"
+          schema: { type: string, enum: [createdAt, -createdAt], default: -createdAt }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - properties: { items: { type: array, items: { $ref: "#/components/schemas/Order" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /orders/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Commandes]
+      summary: Une commande
+      x-palier: 1
+      description: Visible par son client, STAFF et ADMIN. La commande d'un autre client → **404** (on ne révèle pas qu'elle existe).
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /orders/{id}/status:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    patch:
+      tags: [Commandes]
+      summary: Faire avancer ou annuler une commande
+      x-palier: 2
+      description: |
+        STAFF / ADMIN : RECEIVED → PREPARING → READY → PICKED_UP, et RECEIVED | PREPARING | READY → CANCELLED.
+
+        CUSTOMER : seulement sur SA commande (sinon 404), seulement vers `CANCELLED` (sinon 403),
+        seulement depuis `RECEIVED` (sinon 409 INVALID_TRANSITION).
+
+        Toute autre transition → 409 INVALID_TRANSITION. Une annulation remet les portions en stock (transaction).
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties: { status: { $ref: "#/components/schemas/OrderStatus" } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: INVALID_TRANSITION }
+
+  /orders/{id}/payment:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Paiement]
+      summary: Payer sa commande (client propriétaire uniquement)
+      x-palier: 4
+      description: |
+        L'API appelle le simulateur de paiement fourni (voir `pay-sim/README.md`) avec la référence
+        `order-<id>`. Délai maximum 2 s par tentative, 3 tentatives au plus, uniquement sur erreur réseau,
+        délai dépassé ou statut 5xx — jamais sur 402. Le même `Idempotency-Key` est réutilisé pour toutes
+        les tentatives d'un même paiement.
+
+        Seul le client de la commande peut la payer : commande d'un autre client → 404, STAFF ou ADMIN → 403.
+
+        Jetons de test : `tok_visa` (accepté), `tok_declined` (refusé), `tok_flaky` (première réponse perdue),
+        `tok_slow` (toujours trop lent), `tok_down` (prestataire en panne).
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties: { token: { type: string, example: tok_visa } }
+      responses:
+        "200": { description: Payée (`paymentStatus` = PAID), content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { description: PAYMENT_DECLINED }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Déjà payée ou annulée (CONFLICT) }
+        "502": { description: PAYMENT_PROVIDER_ERROR }
+        "504": { description: PAYMENT_PROVIDER_TIMEOUT }
+
+  /events:
+    get:
+      tags: [Temps réel]
+      summary: Flux d'événements (Server-Sent Events)
+      x-palier: 3
+      description: |
+        Réponse `text/event-stream` qui reste ouverte. Authentification par l'en-tête `Authorization`
+        (le front lit le flux avec `fetch`, pas avec `EventSource`, qui ne sait pas envoyer d'en-tête).
+
+        Événements (`data` = la commande au format `Order`, en JSON sur une ligne) :
+        - `order.created` : envoyé aux STAFF et ADMIN ;
+        - `order.updated` (changement de statut, paiement) : envoyé au client de la commande, aux STAFF et aux ADMIN.
+
+        Un commentaire `: ping` toutes les 25 secondes garde la connexion ouverte.
+
+        ```
+        event: order.updated
+        data: {"id":12,"status":"READY",...}
+
+        ```
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: Flux ouvert, content: { text/event-stream: {} } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
