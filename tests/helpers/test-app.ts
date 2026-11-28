@@ -26,6 +26,8 @@ export const testConfig: Config = {
   PAYMENT_API_KEY: "sk_test_roulotte",
   PAYMENT_TIMEOUT_MS: 2000,
   PAYMENT_MAX_ATTEMPTS: 3,
+  PAYMENT_PROVIDER: "fake",
+  PAYMENT_RETRY_BASE_MS: 0,
 };
 
 // Pour les tests unitaires du service des commandes : un bus qui n'écoute personne

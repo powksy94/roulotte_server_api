@@ -15,6 +15,10 @@ const configSchema = z.object({
   PAYMENT_API_KEY: z.string().min(1),
   PAYMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
   PAYMENT_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(3),
+  // Factory : http pour l'application, fake pour les tests (aucun appel réseau)
+  PAYMENT_PROVIDER: z.enum(["http", "fake"]).default("http"),
+  // Attente avant la 2e tentative, doublée à chaque fois (200 ms, 400 ms…)
+  PAYMENT_RETRY_BASE_MS: z.coerce.number().int().min(0).default(200),
 });
 
 export type Config = z.infer<typeof configSchema>;
