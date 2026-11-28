@@ -1,13 +1,12 @@
 import { Router } from "express";
 import type { Auth } from "../../fourni/auth/index.js";
 import type { EventBus } from "../../shared/event-bus.js";
-import { HttpError } from "../../shared/errors.js";
+import { EventController } from "./event-controller.js";
 
-// Flux SSE
-export function createEventsRouter(_events: EventBus, auth: Auth) {
+// Flux SSE authentifié par l'en-tête Authorization (le front lit avec fetch)
+export function createEventsRouter(events: Pick<EventBus, "subscribe">, auth: Auth) {
     const router = Router();
-    router.get("/events", auth.requireAuth, () => {
-        throw new HttpError(501, "NOT_IMPLEMENTED", "Flux SSE pas encore disponible");
-    });
+    const controller = new EventController(events);
+    router.get("/events", auth.requireAuth, controller.streamEvents);
     return router;
 }
